@@ -195,7 +195,7 @@ function App() {
         {documents.length > 0 && <header className="topbar">
           <button className="icon-button menu-button" onClick={() => setMobileOpen(true)} aria-label="Open sidebar"><Menu size={20} /></button>
           <div><span className="eyebrow">Private workspace</span><h1>{activeConversation.title}</h1></div>
-          <div className="connection-status"><span /> Chroma connected</div>
+          <div className="connection-status"><span /> Vector store connected</div>
         </header>}
 
         <section className="chat-scroll" aria-live="polite">

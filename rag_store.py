@@ -7,10 +7,10 @@ import re
 from io import BytesIO
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from uuid import uuid4
 
-import chromadb
+import numpy as np
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 
@@ -18,11 +18,9 @@ from sentence_transformers import SentenceTransformer
 CHUNK_WORDS = 300
 CHUNK_OVERLAP = 50
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-PERSIST_DIRECTORY = os.environ.get("CHROMA_PERSIST_DIRECTORY", "./chroma_db")
-CHROMA_HOST = os.environ.get("CHROMA_HOST")
-CHROMA_PORT = int(os.environ.get("CHROMA_PORT", "8000"))
-CHROMA_SSL = os.environ.get("CHROMA_SSL", "false").lower() == "true"
-REGISTRY_PATH = Path(PERSIST_DIRECTORY) / "documents.json"
+VECTOR_STORE_DIRECTORY = Path(os.environ.get("VECTOR_STORE_DIRECTORY", "./vector_store"))
+RECORDS_PATH = VECTOR_STORE_DIRECTORY / "records.json"
+EMBEDDINGS_PATH = VECTOR_STORE_DIRECTORY / "embeddings.npy"
 
 
 def extract_pages(filename: str, content: bytes) -> list[tuple[str, int | None]]:
@@ -55,7 +53,7 @@ def _safe_filename(filename: str) -> str:
 
 
 class DocumentRegistry:
-    def __init__(self, path: Path = REGISTRY_PATH) -> None:
+    def __init__(self, path: Path = RECORDS_PATH) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.documents: dict[str, dict[str, Any]] = self._load()
@@ -87,20 +85,39 @@ class DocumentRegistry:
         return sorted(self.documents.values(), key=lambda item: item["uploaded_at"], reverse=True)
 
 
-class ChromaDocumentStore:
+class VectorDocumentStore:
     def __init__(self, embedding_model: str = DEFAULT_EMBEDDING_MODEL) -> None:
         self.embedding_model = embedding_model
         self.embedder = SentenceTransformer(embedding_model)
-        self.client = (
-            chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT, ssl=CHROMA_SSL)
-            if CHROMA_HOST
-            else chromadb.PersistentClient(path=PERSIST_DIRECTORY)
-        )
-        self.collection = self.client.get_or_create_collection(
-            name="uploaded_documents",
-            metadata={"hnsw:space": "cosine"},
-        )
         self.registry = DocumentRegistry()
+        self.records = self._load_records()
+        self.embeddings = self._load_embeddings()
+
+    def _load_records(self) -> list[dict[str, Any]]:
+        if not RECORDS_PATH.exists():
+            return []
+        try:
+            return json.loads(RECORDS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+
+    def _load_embeddings(self) -> np.ndarray:
+        if not EMBEDDINGS_PATH.exists():
+            return np.empty((0, 0), dtype=np.float32)
+        try:
+            return np.load(EMBEDDINGS_PATH, allow_pickle=False).astype(np.float32)
+        except (OSError, ValueError):
+            return np.empty((0, 0), dtype=np.float32)
+
+    def _save(self) -> None:
+        VECTOR_STORE_DIRECTORY.mkdir(parents=True, exist_ok=True)
+        records_tmp = RECORDS_PATH.with_suffix(".tmp")
+        records_tmp.write_text(json.dumps(self.records, indent=2), encoding="utf-8")
+        records_tmp.replace(RECORDS_PATH)
+        embeddings_tmp = EMBEDDINGS_PATH.with_suffix(".tmp.npy")
+        with embeddings_tmp.open("wb") as file:
+            np.save(file, self.embeddings)
+        embeddings_tmp.replace(EMBEDDINGS_PATH)
 
     def add_document(self, filename: str, content: bytes) -> dict[str, Any]:
         if not content:
@@ -138,11 +155,15 @@ class ChromaDocumentStore:
             }
             for (_, page, _), chunk_id in zip(records, chunk_ids)
         ]
-        self.collection.add(
-            ids=chunk_ids,
-            documents=[text for text, _, _ in records],
-            embeddings=embeddings.tolist(),
-            metadatas=metadatas,
+        self.records.extend(
+            {"id": chunk_id, "text": text, "metadata": metadata}
+            for chunk_id, (text, _, _), metadata in zip(chunk_ids, records, metadatas)
+        )
+        normalized_embeddings = np.asarray(embeddings, dtype=np.float32)
+        self.embeddings = (
+            normalized_embeddings
+            if not self.embeddings.size
+            else np.vstack((self.embeddings, normalized_embeddings))
         )
 
         document = {
@@ -155,44 +176,38 @@ class ChromaDocumentStore:
             "content_hash": hashlib.sha256(content).hexdigest(),
         }
         self.registry.add(document)
+        self._save()
         return document
 
     def retrieve(self, question: str, top_k: int = 3) -> list[dict[str, Any]]:
-        if not question.strip() or self.collection.count() == 0:
+        if not question.strip() or not self.records:
             return []
-        vector = self.embedder.encode([question], normalize_embeddings=True)
-        result = self.collection.query(
-            query_embeddings=vector.tolist(),
-            n_results=min(top_k, self.collection.count()),
-            include=["documents", "metadatas", "distances"],
+        query_vector = np.asarray(
+            self.embedder.encode([question], normalize_embeddings=True)[0],
+            dtype=np.float32,
         )
-        documents = result.get("documents", [[]])[0]
-        metadatas = result.get("metadatas", [[]])[0]
-        distances = result.get("distances", [[]])[0]
+        scores = self.embeddings @ query_vector
+        best_indices = np.argsort(scores)[::-1][:top_k]
         return [
             {
-                "text": text,
+                "text": self.records[index]["text"],
                 "metadata": {
-                    **metadata,
-                    "page": None if metadata.get("page") == -1 else metadata.get("page"),
+                    **self.records[index]["metadata"],
+                    "page": self.records[index]["metadata"].get("page") or None,
                 },
-                "score": 1.0 - float(distance),
+                "score": float(scores[index]),
             }
-            for text, metadata, distance in zip(documents, metadatas, distances)
+            for index in best_indices
         ]
 
     def delete_document(self, document_id: str) -> bool:
         if not self.registry.remove(document_id):
             return False
-        self.collection.delete(where={"document_id": document_id})
+        keep = [record["metadata"]["document_id"] != document_id for record in self.records]
+        self.records = [record for record, should_keep in zip(self.records, keep) if should_keep]
+        self.embeddings = self.embeddings[np.asarray(keep, dtype=bool)]
+        self._save()
         return True
 
     def documents(self) -> list[dict[str, Any]]:
         return self.registry.all()
-
-
-def build_context(retrieved: Iterable[dict[str, Any]]) -> str:
-    return "\n\n".join(
-        f"[Source {index}]\n{item['text']}"
-        for index, item in enumerate(retrieved, 1)
-    )

@@ -21,7 +21,7 @@ Set this production environment variable in Vercel:
 VITE_API_URL=https://your-api-service.example.com
 ```
 
-The API must be deployed separately with persistent Chroma storage. Add the
+The API must be deployed separately with persistent vector-store storage. Add the
 Vercel deployment URL to the API's `CORS_ORIGINS` value. Never put
 `GROQ_API_KEY` in Vercel or any `VITE_*` variable.# React + Vite
 

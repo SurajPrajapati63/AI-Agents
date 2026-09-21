@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 from main import DEFAULT_LLM_MODEL, generate_answer
-from rag_store import ChromaDocumentStore
+from rag_store import VectorDocumentStore
 
 
 MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
@@ -34,7 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-store = ChromaDocumentStore()
+store = VectorDocumentStore()
 
 
 class AskRequest(BaseModel):
