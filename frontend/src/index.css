@@ -1,0 +1,3 @@
+html, body, #root { min-height: 100%; }
+#root { min-height: 100vh; }
+::selection { color: #07574f; background: #cde9e0; }

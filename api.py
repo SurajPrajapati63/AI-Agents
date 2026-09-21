@@ -5,7 +5,10 @@ from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+load_dotenv()
 
 from main import DEFAULT_LLM_MODEL, generate_answer
 from rag_store import ChromaDocumentStore
@@ -15,7 +18,14 @@ MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
 ALLOWED_TYPES = {".pdf", ".txt"}
 
 app = FastAPI(title="Document Q&A API", version="1.0.0")
-allowed_origins = [origin.strip() for origin in os.environ.get("CORS_ORIGINS", "*").split(",") if origin.strip()]
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:8501",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
