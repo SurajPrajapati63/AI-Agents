@@ -1,4 +1,4 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '')
+const configuredApiUrl = import.meta.env.BACKEND_API_URL?.trim().replace(/\/+$/, '')
 const API_URL = configuredApiUrl || (import.meta.env.DEV ? 'http://localhost:8000' : '')
 const REQUEST_TIMEOUT_MS = 30000
 
