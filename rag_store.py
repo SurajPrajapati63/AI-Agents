@@ -19,6 +19,7 @@ CHUNK_WORDS = 300
 CHUNK_OVERLAP = 50
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 VECTOR_STORE_DIRECTORY = Path(os.environ.get("VECTOR_STORE_DIRECTORY", "./vector_store"))
+DOCUMENTS_PATH = VECTOR_STORE_DIRECTORY / "documents.json"
 RECORDS_PATH = VECTOR_STORE_DIRECTORY / "records.json"
 EMBEDDINGS_PATH = VECTOR_STORE_DIRECTORY / "embeddings.npy"
 
@@ -53,7 +54,7 @@ def _safe_filename(filename: str) -> str:
 
 
 class DocumentRegistry:
-    def __init__(self, path: Path = RECORDS_PATH) -> None:
+    def __init__(self, path: Path = DOCUMENTS_PATH) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.documents: dict[str, dict[str, Any]] = self._load()
