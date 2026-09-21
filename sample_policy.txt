@@ -1,0 +1,7 @@
+Acme Company Leave and Work Policy
+
+Employees are allowed 20 days of paid leave annually. Paid leave is credited at the start of each calendar year. Employees should submit leave requests through the HR portal at least five working days before planned leave. Managers review requests based on team coverage and may ask employees to select different dates when coverage is insufficient.
+
+Employees may work remotely up to two days per week with manager approval. Remote workers must be available during their agreed working hours and must protect company information by using the company VPN. The standard support desk is available Monday through Friday from 9:00 AM to 6:00 PM local time, excluding public holidays.
+
+For equipment issues, employees should first create a ticket in the IT help portal. Critical account-access issues are prioritized by the IT team. New employees receive a laptop and standard accessories on their first working day.
