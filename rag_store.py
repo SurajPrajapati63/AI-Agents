@@ -11,13 +11,16 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
+from openai import OpenAI
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 
 
 CHUNK_WORDS = 300
 CHUNK_OVERLAP = 50
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_BATCH_SIZE = 32
+EMBEDDING_API_BASE_URL = os.environ.get("EMBEDDING_API_BASE_URL", "https://api.openai.com/v1")
+EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY")
 VECTOR_STORE_DIRECTORY = Path(os.environ.get("VECTOR_STORE_DIRECTORY", "./vector_store"))
 DOCUMENTS_PATH = VECTOR_STORE_DIRECTORY / "documents.json"
 RECORDS_PATH = VECTOR_STORE_DIRECTORY / "records.json"
@@ -89,10 +92,43 @@ class DocumentRegistry:
 class VectorDocumentStore:
     def __init__(self, embedding_model: str = DEFAULT_EMBEDDING_MODEL) -> None:
         self.embedding_model = embedding_model
-        self.embedder = SentenceTransformer(embedding_model)
-        self.registry = DocumentRegistry()
-        self.records = self._load_records()
-        self.embeddings = self._load_embeddings()
+        self.registry: DocumentRegistry | None = None
+        self.records: list[dict[str, Any]] | None = None
+        self.embeddings: np.ndarray | None = None
+        self._embedding_client: OpenAI | None = None
+
+    @property
+    def embedding_client(self) -> OpenAI:
+        if self._embedding_client is None:
+            if not EMBEDDING_API_KEY:
+                raise ValueError("EMBEDDING_API_KEY is not configured on the backend.")
+            self._embedding_client = OpenAI(
+                api_key=EMBEDDING_API_KEY,
+                base_url=EMBEDDING_API_BASE_URL,
+                timeout=30.0,
+            )
+        return self._embedding_client
+
+    def _ensure_loaded(self) -> None:
+        if self.registry is None:
+            self.registry = DocumentRegistry()
+        if self.records is None:
+            self.records = self._load_records()
+        if self.embeddings is None:
+            self.embeddings = self._load_embeddings()
+
+    def _embed(self, texts: list[str]) -> np.ndarray:
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            batch = texts[start : start + EMBEDDING_BATCH_SIZE]
+            response = self.embedding_client.embeddings.create(
+                model=self.embedding_model,
+                input=batch,
+            )
+            vectors.extend(item.embedding for item in sorted(response.data, key=lambda item: item.index))
+        result = np.asarray(vectors, dtype=np.float32)
+        norms = np.linalg.norm(result, axis=1, keepdims=True)
+        return result / np.maximum(norms, 1e-12)
 
     def _load_records(self) -> list[dict[str, Any]]:
         if not RECORDS_PATH.exists():
@@ -111,6 +147,7 @@ class VectorDocumentStore:
             return np.empty((0, 0), dtype=np.float32)
 
     def _save(self) -> None:
+        self._ensure_loaded()
         VECTOR_STORE_DIRECTORY.mkdir(parents=True, exist_ok=True)
         records_tmp = RECORDS_PATH.with_suffix(".tmp")
         records_tmp.write_text(json.dumps(self.records, indent=2), encoding="utf-8")
@@ -121,6 +158,7 @@ class VectorDocumentStore:
         embeddings_tmp.replace(EMBEDDINGS_PATH)
 
     def add_document(self, filename: str, content: bytes) -> dict[str, Any]:
+        self._ensure_loaded()
         if not content:
             raise ValueError("The uploaded file is empty.")
         suffix = Path(filename).suffix.lower()
@@ -140,11 +178,7 @@ class VectorDocumentStore:
             raise ValueError("The document contains no chunkable text.")
 
         chunk_ids = [f"{document_id}_chunk_{index:05d}" for _, _, index in records]
-        embeddings = self.embedder.encode(
-            [text for text, _, _ in records],
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )
+        embeddings = self._embed([text for text, _, _ in records])
         metadatas = [
             {
                 "document_id": document_id,
@@ -160,11 +194,10 @@ class VectorDocumentStore:
             {"id": chunk_id, "text": text, "metadata": metadata}
             for chunk_id, (text, _, _), metadata in zip(chunk_ids, records, metadatas)
         )
-        normalized_embeddings = np.asarray(embeddings, dtype=np.float32)
         self.embeddings = (
-            normalized_embeddings
+            embeddings
             if not self.embeddings.size
-            else np.vstack((self.embeddings, normalized_embeddings))
+            else np.vstack((self.embeddings, embeddings))
         )
 
         document = {
@@ -181,12 +214,15 @@ class VectorDocumentStore:
         return document
 
     def retrieve(self, question: str, top_k: int = 3) -> list[dict[str, Any]]:
+        self._ensure_loaded()
         if not question.strip() or not self.records:
             return []
-        query_vector = np.asarray(
-            self.embedder.encode([question], normalize_embeddings=True)[0],
-            dtype=np.float32,
-        )
+        query_vector = self._embed([question])[0]
+        if self.embeddings.shape[1] != query_vector.shape[0]:
+            raise ValueError(
+                "Stored embeddings use a different embedding model. "
+                "Delete vector_store/ and upload the documents again."
+            )
         scores = self.embeddings @ query_vector
         best_indices = np.argsort(scores)[::-1][:top_k]
         return [
@@ -202,6 +238,7 @@ class VectorDocumentStore:
         ]
 
     def delete_document(self, document_id: str) -> bool:
+        self._ensure_loaded()
         if not self.registry.remove(document_id):
             return False
         keep = [record["metadata"]["document_id"] != document_id for record in self.records]
@@ -211,4 +248,5 @@ class VectorDocumentStore:
         return True
 
     def documents(self) -> list[dict[str, Any]]:
+        self._ensure_loaded()
         return self.registry.all()

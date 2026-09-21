@@ -9,14 +9,28 @@ disk for the vector store.
 Deploy the repository's Python service to a host with persistent storage.
 
 ```powershell
-venv\Scripts\python -m pip install -r requirements.txt
-venv\Scripts\uvicorn api:app --host 0.0.0.0 --port 8000
+pip install -r requirements.txt
+uvicorn api:app --host 0.0.0.0 --port $PORT
+```
+
+Render build command:
+
+```text
+pip install -r requirements.txt
+```
+
+Render start command:
+
+```text
+uvicorn api:app --host 0.0.0.0 --port $PORT
 ```
 
 Set these backend environment variables:
 
 ```text
 GROQ_API_KEY=your_backend_only_key
+EMBEDDING_API_KEY=your_embedding_provider_key
+EMBEDDING_API_BASE_URL=https://api.openai.com/v1
 VECTOR_STORE_DIRECTORY=/data/vector_store
 CORS_ORIGINS=https://your-project.vercel.app
 MAX_FILE_SIZE=10485760

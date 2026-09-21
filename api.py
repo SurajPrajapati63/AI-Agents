@@ -34,7 +34,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-store = VectorDocumentStore()
+store: VectorDocumentStore | None = None
+
+
+def get_store() -> VectorDocumentStore:
+    global store
+    if store is None:
+        store = VectorDocumentStore()
+    return store
 
 
 class AskRequest(BaseModel):
@@ -62,7 +69,7 @@ async def upload_documents(files: Annotated[list[UploadFile], File(...)]) -> dic
             content = await upload.read()
             if len(content) > MAX_FILE_SIZE:
                 raise HTTPException(status_code=413, detail=f"{filename} exceeds the file size limit.")
-            processed.append(store.add_document(filename, content))
+            processed.append(get_store().add_document(filename, content))
     except HTTPException:
         raise
     except Exception as error:
@@ -81,7 +88,7 @@ def ask_question(request: AskRequest) -> dict:
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    retrieved = store.retrieve(question)
+    retrieved = get_store().retrieve(question)
     if not retrieved:
         return {
             "success": True,
@@ -122,11 +129,11 @@ def ask_question(request: AskRequest) -> dict:
 
 @app.get("/documents")
 def list_documents() -> dict:
-    return {"success": True, "documents": store.documents()}
+    return {"success": True, "documents": get_store().documents()}
 
 
 @app.delete("/documents/{document_id}")
 def delete_document(document_id: str) -> dict[str, object]:
-    if not store.delete_document(document_id):
+    if not get_store().delete_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"success": True, "message": "Document deleted successfully"}
