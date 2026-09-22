@@ -1,5 +1,5 @@
 const configuredApiUrl = import.meta.env.API_URL?.trim().replace(/\/+$/, '')
-const API_URL = configuredApiUrl || (import.meta.env.DEV ? ' https://ai-agents-qigt.onrender.com' : '')
+const API_URL = configuredApiUrl
 const REQUEST_TIMEOUT_MS = 30000
 
 async function request(path, options = {}) {
