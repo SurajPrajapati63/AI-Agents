@@ -28,15 +28,16 @@ uvicorn api:app --host 0.0.0.0 --port $PORT
 Set these backend environment variables:
 
 ```text
-GROQ_API_KEY=your_backend_only_key
-EMBEDDING_API_KEY=your_embedding_provider_key
-EMBEDDING_API_BASE_URL=https://api.openai.com/v1
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=llama-3.3-70b-versatile
 VECTOR_STORE_DIRECTORY=/data/vector_store
 CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app
 MAX_FILE_SIZE=10485760
 ```
 
-Do not expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.
+`GROQ_API_KEY` is used for answer generation. Document retrieval uses local
+feature-hash embeddings, so no second embedding API key is required. Do not
+expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.
 
 ## Vercel frontend
 

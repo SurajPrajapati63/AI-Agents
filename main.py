@@ -7,7 +7,7 @@ from typing import Sequence
 
 
 NOT_FOUND = "I couldn't find that information in the uploaded documents."
-DEFAULT_LLM_MODEL = "openai/gpt-oss-120b"
+DEFAULT_LLM_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
 def generate_answer(

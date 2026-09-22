@@ -11,16 +11,13 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
-from openai import OpenAI
 from pypdf import PdfReader
 
 
 CHUNK_WORDS = 300
 CHUNK_OVERLAP = 50
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_BATCH_SIZE = 32
-EMBEDDING_API_BASE_URL = os.environ.get("EMBEDDING_API_BASE_URL", "https://api.openai.com/v1")
-EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY")
+LOCAL_EMBEDDING_DIMENSIONS = 768
 VECTOR_STORE_DIRECTORY = Path(os.environ.get("VECTOR_STORE_DIRECTORY", "./vector_store"))
 DOCUMENTS_PATH = VECTOR_STORE_DIRECTORY / "documents.json"
 RECORDS_PATH = VECTOR_STORE_DIRECTORY / "records.json"
@@ -95,19 +92,6 @@ class VectorDocumentStore:
         self.registry: DocumentRegistry | None = None
         self.records: list[dict[str, Any]] | None = None
         self.embeddings: np.ndarray | None = None
-        self._embedding_client: OpenAI | None = None
-
-    @property
-    def embedding_client(self) -> OpenAI:
-        if self._embedding_client is None:
-            if not EMBEDDING_API_KEY:
-                raise ValueError("EMBEDDING_API_KEY is not configured on the backend.")
-            self._embedding_client = OpenAI(
-                api_key=EMBEDDING_API_KEY,
-                base_url=EMBEDDING_API_BASE_URL,
-                timeout=30.0,
-            )
-        return self._embedding_client
 
     def _ensure_loaded(self) -> None:
         if self.registry is None:
@@ -118,15 +102,15 @@ class VectorDocumentStore:
             self.embeddings = self._load_embeddings()
 
     def _embed(self, texts: list[str]) -> np.ndarray:
-        vectors: list[list[float]] = []
-        for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
-            batch = texts[start : start + EMBEDDING_BATCH_SIZE]
-            response = self.embedding_client.embeddings.create(
-                model=self.embedding_model,
-                input=batch,
-            )
-            vectors.extend(item.embedding for item in sorted(response.data, key=lambda item: item.index))
-        result = np.asarray(vectors, dtype=np.float32)
+        result = np.zeros((len(texts), LOCAL_EMBEDDING_DIMENSIONS), dtype=np.float32)
+        for row, text in enumerate(texts):
+            tokens = re.findall(r"[a-z0-9]+", text.lower())
+            features = tokens + [f"{left}_{right}" for left, right in zip(tokens, tokens[1:])]
+            for feature in features:
+                digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
+                bucket = int.from_bytes(digest[:4], "little") % LOCAL_EMBEDDING_DIMENSIONS
+                sign = 1.0 if digest[4] & 1 else -1.0
+                result[row, bucket] += sign
         norms = np.linalg.norm(result, axis=1, keepdims=True)
         return result / np.maximum(norms, 1e-12)
 
