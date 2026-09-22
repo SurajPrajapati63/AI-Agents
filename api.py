@@ -18,17 +18,24 @@ MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
 ALLOWED_TYPES = {".pdf", ".txt"}
 
 app = FastAPI(title="Document Q&A API", version="1.0.0")
-allowed_origins = [
+configured_origins = os.environ.get("CORS_ORIGINS", "")
+allowed_origins = {
     origin.strip()
-    for origin in os.environ.get(
-        "CORS_ORIGINS"
-    )
+    for origin in configured_origins.split(",")
     if origin.strip()
-]
+}
+allowed_origins.update(
+    {
+        "http://localhost:5173",
+        "http://localhost:8501",
+        "http://ai-agent-rag.vercel.app",
+        "https://ai-agent-rag.vercel.app",
+    }
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=allowed_origins != ["*"],
+    allow_origins=sorted(allowed_origins),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
