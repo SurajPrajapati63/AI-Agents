@@ -22,7 +22,7 @@ allowed_origins = [
     origin.strip()
     for origin in os.environ.get(
         "CORS_ORIGINS"
-    ).split(",")
+    )
     if origin.strip()
 ]
 app.add_middleware(
