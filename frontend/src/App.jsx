@@ -124,6 +124,10 @@ function App() {
     event?.preventDefault()
     const trimmed = question.trim()
     if (!trimmed || isSending) return
+    if (!documents.length) {
+      setStatus({ type: 'error', text: 'Upload a PDF or TXT document before asking a question.' })
+      return
+    }
 
     const userMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
     const history = activeConversation.messages.map(({ role, content }) => ({ role, content }))
