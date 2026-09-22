@@ -1,5 +1,5 @@
 const configuredApiUrl = import.meta.env.BACKEND_API_URL?.trim().replace(/\/+$/, '')
-const API_URL = configuredApiUrl || (import.meta.env.DEV ? 'http://localhost:8000' : '')
+const API_URL = configuredApiUrl || (import.meta.env.DEV ? 'BACKEND_API_URL' : '')
 const REQUEST_TIMEOUT_MS = 30000
 
 async function request(path, options = {}) {
