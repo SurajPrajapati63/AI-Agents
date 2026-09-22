@@ -22,7 +22,7 @@ allowed_origins = [
     origin.strip()
     for origin in os.environ.get(
         "CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:8501",
+        "http://localhost:5173,http://localhost:8501,http://ai-agent-rag.vercel.app",
     ).split(",")
     if origin.strip()
 ]

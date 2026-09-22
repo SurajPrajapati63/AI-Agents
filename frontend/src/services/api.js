@@ -4,7 +4,7 @@ const REQUEST_TIMEOUT_MS = 30000
 
 async function request(path, options = {}) {
   if (!API_URL) {
-    throw new Error('The API is not configured. Set VITE_API_URL in the Vercel project settings.')
+    throw new Error('The API is not configured. Set API_URL in the Vercel project settings.')
   }
 
   const controller = new AbortController()

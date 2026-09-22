@@ -3,7 +3,11 @@ import { defineConfig, loadEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiUrl = env.API_URL || (mode === 'development' ? 'http://localhost:8000' : '')
+  const apiUrl = env.API_URL || (
+    mode === 'development'
+      ? 'http://localhost:8000'
+      : 'https://ai-agents-qigt.onrender.com'
+  )
 
   return {
     plugins: [react()],
