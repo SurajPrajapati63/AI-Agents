@@ -17,7 +17,7 @@ def generate_answer(
     chat_history: Sequence[dict[str, str]] | None = None,
 ) -> str:
     """Generate a concise answer using retrieved document chunks only."""
-    from openai import OpenAI
+    from groq import Groq
 
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
@@ -57,10 +57,7 @@ CONVERSATION HISTORY:
 
 QUESTION: {question}
 """
-    response = OpenAI(
-        api_key=api_key,
-        base_url="https://api.groq.com/openai/v1",
-    ).chat.completions.create(
+    response = Groq(api_key=api_key).chat.completions.create(
         model=model,
         temperature=0,
         messages=[
