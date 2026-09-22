@@ -140,12 +140,12 @@ function App() {
       const payload = await askQuestion(trimmed, history)
       updateActiveConversation((conversation) => ({
         ...conversation,
-        messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer, sources: payload.sources || [] }],
+        messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }],
       }))
     } catch (error) {
       updateActiveConversation((conversation) => ({
         ...conversation,
-        messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: `I couldn't complete that request.\n\n${error.message}`, sources: [], error: true }],
+        messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: `I couldn't complete that request.\n\n${error.message}`, error: true }],
       }))
     } finally {
       setIsSending(false)
