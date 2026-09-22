@@ -37,7 +37,6 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [expandedSources, setExpandedSources] = useState({})
   const composerFileInputRef = useRef(null)
   const messagesEndRef = useRef(null)
 
@@ -208,7 +207,6 @@ function App() {
                 <div className={`avatar ${message.role}`}>{message.role === 'assistant' ? <Bot size={16} /> : 'You'}</div>
                 <div className="message-body"><div className="message-meta">{message.role === 'user' ? 'You' : 'Sourcewise'} <span>·</span> {formatDate(new Date())}</div>
                   <div className={`message-content ${message.error ? 'message-error' : ''}`}>{message.role === 'assistant' ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown> : <p>{message.content}</p>}</div>
-                  {message.sources?.length > 0 && <div className="sources-block"><button className="sources-toggle" onClick={() => setExpandedSources((current) => ({ ...current, [message.id]: !current[message.id] }))}><Check size={14} /> {message.sources.length} source{message.sources.length > 1 ? 's' : ''} used <ChevronDown className={expandedSources[message.id] ? 'rotate' : ''} size={14} /></button>{expandedSources[message.id] && <div className="source-list">{message.sources.map((source) => <span key={source.chunk_id}><FileText size={13} /> {source.filename}{source.page ? ` · Page ${source.page}` : ''}</span>)}</div>}</div>}
                 </div>
               </article>
             ))}
