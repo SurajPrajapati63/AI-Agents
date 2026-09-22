@@ -32,7 +32,7 @@ GROQ_API_KEY=your_backend_only_key
 EMBEDDING_API_KEY=your_embedding_provider_key
 EMBEDDING_API_BASE_URL=https://api.openai.com/v1
 VECTOR_STORE_DIRECTORY=/data/vector_store
-CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app
+CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app
 MAX_FILE_SIZE=10485760
 ```
 
@@ -49,7 +49,7 @@ Do not expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.
 API_URL=https://ai-agents-qigt.onrender.com
 ```
 
-5. Deploy, then ensure `http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app` is included in the
+5. Deploy, then ensure `http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app` is included in the
    backend's `CORS_ORIGINS` value and redeploy the backend.
 
 The frontend uses `frontend/vercel.json`, `npm ci`, and a production Vite

@@ -30,6 +30,7 @@ allowed_origins.update(
         "http://localhost:8501",
         "http://ai-agent-rag.vercel.app",
         "https://ai-agent-rag.vercel.app",
+        "https://ai-agents-inky-two.vercel.app",
     }
 )
 app.add_middleware(
