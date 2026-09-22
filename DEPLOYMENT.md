@@ -46,7 +46,7 @@ Do not expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.
 4. Add the production environment variable:
 
 ```text
-VITE_API_URL=https://your-backend.example.com
+API_URL=https://your-backend.example.com
 ```
 
 5. Deploy, then copy the generated Vercel URL into the backend's
