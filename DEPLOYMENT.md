@@ -29,7 +29,6 @@ Set these backend environment variables:
 
 ```text
 GROQ_API_KEY=your_groq_key
-GROQ_MODEL=llama-3.1-8b-instant
 VECTOR_STORE_DIRECTORY=/data/vector_store
 CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app
 MAX_FILE_SIZE=10485760
