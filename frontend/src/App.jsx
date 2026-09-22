@@ -38,6 +38,7 @@ function App() {
   const [status, setStatus] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const composerFileInputRef = useRef(null)
+  const chatScrollRef = useRef(null)
   const messagesEndRef = useRef(null)
 
   const selectedId = activeId || conversations[0].id
@@ -54,7 +55,10 @@ function App() {
   }, [])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    chatScrollRef.current?.scrollTo({
+      top: chatScrollRef.current.scrollHeight,
+      behavior: 'smooth',
+    })
   }, [activeConversation?.messages, isSending])
 
   function updateActiveConversation(update) {
@@ -197,7 +201,7 @@ function App() {
           <div className="connection-status"><span /> Vector store connected</div>
         </header>}
 
-        <section className="chat-scroll" aria-live="polite">
+        <section ref={chatScrollRef} className="chat-scroll" aria-live="polite">
           <div className="chat-column">
             {!activeConversation.messages.length ? <div className="welcome-panel">
               <div className="welcome-icon"><Bot size={24} /></div><p className="eyebrow">Document Q&A</p><h2>Ask better questions of your files.</h2><p>Upload a policy, resume, or project note, then ask for a clear answer grounded in the text.</p>
