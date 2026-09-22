@@ -178,10 +178,10 @@ function App() {
           <div className="conversation-list">
             {conversations.filter((conversation) => conversation.messages.length > 0).map((conversation) => (
               <div className={`conversation-row ${conversation.id === selectedId ? 'active' : ''}`} key={conversation.id}>
-                <button className="conversation-item" onClick={() => { setActiveId(conversation.id); setMobileOpen(false) }}>
+                <button type="button" className="conversation-item" onClick={() => { setActiveId(conversation.id); setMobileOpen(false) }}>
                   <MessageSquarePlus size={15} /><span>{conversation.title}</span>
                 </button>
-                <button className="icon-button conversation-delete" onClick={() => deleteConversation(conversation.id)} aria-label={`Delete ${conversation.title}`}><Trash2 size={14} /></button>
+                <button type="button" className="icon-button conversation-delete" onClick={(event) => { event.stopPropagation(); deleteConversation(conversation.id) }} aria-label={`Delete ${conversation.title}`}><Trash2 size={14} /></button>
               </div>
             ))}
           </div>
