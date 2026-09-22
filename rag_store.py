@@ -207,7 +207,17 @@ class VectorDocumentStore:
                 "Stored embeddings use a different embedding model. "
                 "Delete vector_store/ and upload the documents again."
             )
-        scores = self.embeddings @ query_vector
+        semantic_scores = self.embeddings @ query_vector
+        question_terms = set(re.findall(r"[a-z0-9]+", question.lower()))
+        lexical_scores = np.asarray(
+            [
+                len(question_terms & set(re.findall(r"[a-z0-9]+", record["text"].lower())))
+                / max(len(question_terms), 1)
+                for record in self.records
+            ],
+            dtype=np.float32,
+        )
+        scores = semantic_scores + lexical_scores
         best_indices = np.argsort(scores)[::-1][:top_k]
         return [
             {
