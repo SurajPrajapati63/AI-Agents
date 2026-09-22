@@ -21,8 +21,7 @@ app = FastAPI(title="Document Q&A API", version="1.0.0")
 allowed_origins = [
     origin.strip()
     for origin in os.environ.get(
-        "CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:8501,http://ai-agent-rag.vercel.app",
+        "CORS_ORIGINS"
     ).split(",")
     if origin.strip()
 ]
