@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
-from pypdf import PdfReader
+from PyPDF2 import PdfReader
 
 
 CHUNK_WORDS = 300
