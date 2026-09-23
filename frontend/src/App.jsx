@@ -289,8 +289,8 @@ function App() {
       <main className="chat-workspace">
         <header className="topbar">
           <button className="icon-button menu-button" onClick={() => setMobileOpen(true)} aria-label="Open sidebar"><Menu size={20} /></button>
-          <div><span className="eyebrow">Private workspace</span><h1>{activeConversation.title}</h1></div>
-          <div className="connection-status"><span /> Vector store connected</div>
+          <div><span className="eyebrow">Private workspace</span></div>
+          <div className="connection-status"></div>
           <div className="user-controls">
             <div className="user-identity"><UserRound size={16} /><span>{user.email}</span></div>
             <button type="button" className="logout-button" onClick={handleLogout} aria-label="Sign out"><LogOut size={15} /><span>Sign out</span></button>
@@ -304,8 +304,8 @@ function App() {
               <div className="prompt-suggestions">{['Summarize the key points', 'What projects are mentioned?', 'What should I know first?'].map((prompt) => <button key={prompt} onClick={() => setQuestion(prompt)}>{prompt}<ChevronDown size={14} /></button>)}</div>
             </div> : activeConversation.messages.map((message) => (
               <article className={`message-row ${message.role}`} key={message.id}>
-                <div className={`avatar ${message.role}`}>{message.role === 'assistant' ? <Bot size={16} /> : 'You'}</div>
-                <div className="message-body"><div className="message-meta">{message.role === 'user' ? 'You' : 'Sourcewise'} <span>·</span> {formatDate(new Date())}</div>
+                <div className={`avatar ${message.role}`}>{message.role === 'assistant' ? <Bot size={16} /> : 'You'} </div>
+                <div className="message-body"><div className="message-meta">{message.role === 'user' ? "" : 'Sourcewise'}</div>
                   <div className={`message-content ${message.error ? 'message-error' : ''}`}>{message.role === 'assistant' ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown> : <p>{message.content}</p>}</div>
                 </div>
               </article>
