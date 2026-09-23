@@ -8,23 +8,12 @@ import {
 import AuthPage from './Auth.jsx'
 import {
   askQuestion, clearAuthToken, deleteDocument, getDocuments, getCurrentUser, getAuthToken,
-  logout as logoutRequest, uploadDocuments,
+  getConversations, logout as logoutRequest, saveConversations, uploadDocuments,
 } from './services/api'
 import './App.css'
 
-const CHAT_STORAGE_KEY = 'document_qna_conversations'
-
 function newConversation() {
   return { id: crypto.randomUUID(), title: 'New conversation', messages: [] }
-}
-
-function readConversations() {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(CHAT_STORAGE_KEY))
-    return Array.isArray(saved) && saved.length ? saved : [newConversation()]
-  } catch {
-    return [newConversation()]
-  }
 }
 
 function formatDate(value) {
@@ -32,7 +21,7 @@ function formatDate(value) {
 }
 
 function App() {
-  const [conversations, setConversations] = useState(readConversations)
+  const [conversations, setConversations] = useState(() => [newConversation()])
   const [activeId, setActiveId] = useState(null)
   const [documents, setDocuments] = useState([])
   const [selectedFiles, setSelectedFiles] = useState([])
@@ -51,8 +40,12 @@ function App() {
   const activeConversation = conversations.find((conversation) => conversation.id === selectedId) || conversations[0]
 
   useEffect(() => {
-    sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(conversations))
-  }, [conversations])
+    if (!user) return undefined
+    const timeout = setTimeout(() => {
+      saveConversations(conversations).catch(() => {})
+    }, 400)
+    return () => clearTimeout(timeout)
+  }, [conversations, user])
 
   useEffect(() => {
     let active = true
@@ -63,7 +56,15 @@ function App() {
 
     getCurrentUser()
       .then((payload) => {
-        if (active) setUser(payload.user)
+        if (!active) return undefined
+        setUser(payload.user)
+        return getConversations()
+      })
+      .then((payload) => {
+        if (active && payload && Array.isArray(payload.conversations) && payload.conversations.length) {
+          setConversations(payload.conversations)
+          setActiveId(payload.conversations[0].id)
+        }
       })
       .catch(() => {
         clearAuthToken()
@@ -128,11 +129,12 @@ function App() {
   }
 
   async function handleLogout() {
+    setUser(null)
     try {
       await logoutRequest()
+    } catch {
     } finally {
       clearAuthToken()
-      setUser(null)
       setAuthLoading(false)
       setConversations([newConversation()])
       setActiveId(null)

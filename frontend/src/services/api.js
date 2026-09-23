@@ -94,6 +94,18 @@ export async function logout() {
   }
 }
 
+export function getConversations() {
+  return request('/conversations')
+}
+
+export function saveConversations(conversations) {
+  return request('/conversations', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversations }),
+  })
+}
+
 export function uploadDocuments(files) {
   const formData = new FormData()
   files.forEach((file) => formData.append('files', file))

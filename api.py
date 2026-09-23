@@ -75,6 +75,10 @@ class AskRequest(BaseModel):
     chat_history: list[dict[str, str]] = Field(default_factory=list, max_length=50)
 
 
+class ConversationsRequest(BaseModel):
+    conversations: list[dict] = Field(default_factory=list, max_length=100)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "healthy"}
@@ -108,6 +112,34 @@ def logout(token: Annotated[str, Depends(get_bearer_token)]) -> dict[str, bool]:
     except PyMongoError as error:
         raise database_error(error) from error
     return {"success": True}
+
+
+@app.get("/conversations")
+def list_conversations(user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    try:
+        conversation = get_database().conversations.find_one({"user_id": user["id"]})
+        return {
+            "success": True,
+            "conversations": conversation.get("conversations", []) if conversation else [],
+        }
+    except PyMongoError as error:
+        raise database_error(error) from error
+
+
+@app.put("/conversations")
+def save_conversations(
+    request: ConversationsRequest,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict[str, bool]:
+    try:
+        get_database().conversations.update_one(
+            {"user_id": user["id"]},
+            {"$set": {"conversations": request.conversations}},
+            upsert=True,
+        )
+        return {"success": True}
+    except PyMongoError as error:
+        raise database_error(error) from error
 
 
 @app.post("/upload")
