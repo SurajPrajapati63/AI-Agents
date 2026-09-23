@@ -52,6 +52,15 @@ them before placing the value in `MONGODB_URI`. Set this variable in Render's
 Environment settings and redeploy; Render does not read the repository's local
 `.env` file.
 
+In Render, the variable value must be only the URI, for example:
+
+```text
+mongodb+srv://<db-user>:<url-encoded-password>@<real-cluster-host>/?retryWrites=true&w=majority
+```
+
+Do not paste `MONGODB_URI=`, quotes, or the Atlas placeholder values into the
+value field.
+
 `GROQ_API_KEY` is used for answer generation. Document retrieval uses local
 feature-hash embeddings, so no second embedding API key is required. Do not
 expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.

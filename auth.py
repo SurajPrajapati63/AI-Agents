@@ -18,14 +18,31 @@ from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 
+MONGO_SCHEMES = ("mongodb://", "mongodb+srv://")
+
+
 def _resolve_mongodb_uri() -> str:
     """Read the connection string from MONGODB_URI or the MONGO_URI alias."""
-    return (
-        os.environ.get("MONGODB_URI")
-    )
+    for key in ("MONGODB_URI", "MONGO_URI"):
+        value = os.environ.get(key, "").strip().strip('"').strip("'").strip()
+        if not value:
+            continue
+        if value.startswith(f"{key}="):
+            value = value[len(key) + 1 :].strip().strip('"').strip("'").strip()
+        if not value.startswith(MONGO_SCHEMES):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Environment variable {key} is not a valid MongoDB connection "
+                    "string: it must start with 'mongodb://' or 'mongodb+srv://' "
+                    "(lowercase, no surrounding quotes, spaces, or line breaks). "
+                    "Fix the value in Render's Environment settings and redeploy."
+                ),
+            )
+        return value
+    return "mongodb://localhost:27017"
 
 
-MONGODB_URI = _resolve_mongodb_uri()
 MONGODB_DATABASE = os.environ.get("MONGODB_DATABASE", "sourcewise")
 SESSION_TTL_HOURS = int(os.environ.get("SESSION_TTL_HOURS", "24"))
 BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", "12"))
@@ -60,7 +77,7 @@ def get_client() -> MongoClient:
     global _client
     if _client is None:
         _client = MongoClient(
-            MONGODB_URI,
+            _resolve_mongodb_uri(),
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
             appname="sourcewise",
@@ -196,4 +213,4 @@ def revoke_session(token: str) -> None:
 
 
 def database_error(error: PyMongoError) -> HTTPException:
-    return HTTPException(status_code=503, detail=error._message)
+    return HTTPException(status_code=503, detail=str(error) or "Database unavailable.")
