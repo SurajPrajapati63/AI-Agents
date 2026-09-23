@@ -196,4 +196,4 @@ def revoke_session(token: str) -> None:
 
 
 def database_error(error: PyMongoError) -> HTTPException:
-    return HTTPException(status_code=503, detail="The database is temporarily unavailable.")
+    return HTTPException(status_code=503, detail=error._message)
