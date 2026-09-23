@@ -130,6 +130,26 @@ def _conversation_messages(database, user: dict, session_id: str) -> list[dict]:
     return list(database.messages.find(_conversation_filter(user, session_id), {"_id": 0}).sort("timestamp", 1))
 
 
+def _chat_history(database, user: dict, session_id: str, limit: int = 50) -> list[dict]:
+    """Current chat plus earlier chats, so a new chat still knows previous data."""
+    current = list(
+        database.messages.find(_conversation_filter(user, session_id), {"_id": 0})
+        .sort("timestamp", -1)
+        .limit(limit)
+    )
+    earlier = list(
+        database.messages.find(
+            {"user_id": user["id"], "session_id": {"$ne": session_id}},
+            {"_id": 0, "role": 1, "content": 1},
+        )
+        .sort("timestamp", -1)
+        .limit(limit)
+    )
+    history = [{"role": item["role"], "content": item["content"]} for item in reversed(earlier)]
+    history += [{"role": item["role"], "content": item["content"]} for item in reversed(current)]
+    return history[-limit:]
+
+
 def _build_sources(retrieved: list[dict]) -> list[dict]:
     """Deduplicate retrieved chunks into citation payloads."""
     sources: list[dict] = []
@@ -299,7 +319,7 @@ def send_conversation_message(
             "content": question, "timestamp": now, "message_id": f"msg_{uuid4().hex}",
         })
         _remember_explicit_fact(database, user["id"], question)
-        history = [{"role": item["role"], "content": item["content"]} for item in messages[-50:]]
+        history = _chat_history(database, user, session_id)
         answer, retrieved = _answer_question(
             question,
             user,

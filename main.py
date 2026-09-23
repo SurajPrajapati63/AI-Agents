@@ -21,7 +21,8 @@ Answer the user's question by following this priority:
 
 1. Follow-up and personal questions ("what is my name", "what about the second one?",
    "summarize what I asked so far") -> answer from the SAVED MEMORIES and CONVERSATION
-   HISTORY below, without citations.
+   HISTORY below, without citations. The history includes data shared in earlier chats, so
+   use it whenever the current chat does not contain the answer.
 2. Questions about the uploaded documents -> answer from the DOCUMENT CONTEXT below and
    cite the filename and page shown in the labels, for example (report.pdf, page 3).
    If the context does not contain the answer, say you couldn't find it in the uploaded
@@ -43,7 +44,7 @@ SAVED MEMORIES:
 
 {memories}
 
-CONVERSATION HISTORY:
+CONVERSATION HISTORY (earlier chats and this chat):
 
 {history}
 
