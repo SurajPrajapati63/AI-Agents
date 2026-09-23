@@ -94,8 +94,32 @@ export async function logout() {
   }
 }
 
-export function getConversations() {
+export function listConversations() {
   return request('/conversations')
+}
+
+export function createConversation(title = 'New conversation') {
+  return request('/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function getConversationMessages(sessionId) {
+  return request(`/conversations/${sessionId}/messages`)
+}
+
+export function sendConversationMessage(sessionId, content) {
+  return request(`/conversations/${sessionId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+}
+
+export function deleteConversation(sessionId) {
+  return request(`/conversations/${sessionId}`, { method: 'DELETE' })
 }
 
 export function saveConversations(conversations) {

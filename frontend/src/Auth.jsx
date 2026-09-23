@@ -3,7 +3,7 @@ import { ArrowRight, Bot, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, Sparkles
 import { login, signup, setAuthToken } from './services/api'
 import './Auth.css'
 
-function AuthPage({ onAuthenticated }) {
+function AuthPage({ onAuthenticated, onToast }) {
   const [mode, setMode] = useState('login')
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -45,9 +45,12 @@ function AuthPage({ onAuthenticated }) {
     try {
       const payload = await (isSignup ? signup({ email, password }) : login({ email, password }))
       setAuthToken(payload.token)
+      onToast({ type: 'success', text: isSignup ? 'Account created successfully!' : 'Login successful!' })
       onAuthenticated(payload.user)
     } catch (requestError) {
-      setError(requestError.message || 'Unable to continue. Please try again.')
+      const message = requestError.message || 'Unable to continue. Please try again.'
+      setError(message)
+      if (!isSignup) onToast({ type: 'error', text: message })
     } finally {
       setLoading(false)
     }

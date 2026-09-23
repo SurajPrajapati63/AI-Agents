@@ -253,6 +253,41 @@ class VectorDocumentStore:
         self._save()
         return True
 
+    def retrieve_all(self, question: str, owner_id: str) -> list[dict[str, Any]]:
+        """Return every owned chunk, ordered by relevance, for document operations."""
+        self._ensure_loaded()
+        if not question.strip() or not self.records:
+            return []
+        owned_indices = [
+            index for index, record in enumerate(self.records)
+            if record["metadata"].get("owner_id") == owner_id
+        ]
+        if not owned_indices:
+            return []
+        query_vector = self._embed([question])[0]
+        owned_embeddings = self.embeddings[np.asarray(owned_indices)]
+        semantic_scores = owned_embeddings @ query_vector
+        question_terms = set(re.findall(r"[a-z0-9]+", question.lower()))
+        scores = semantic_scores + np.asarray(
+            [
+                len(question_terms & set(re.findall(r"[a-z0-9]+", self.records[index]["text"].lower())))
+                / max(len(question_terms), 1)
+                for index in owned_indices
+            ],
+            dtype=np.float32,
+        )
+        return [
+            {
+                "text": self.records[owned_indices[index]]["text"],
+                "metadata": {
+                    **self.records[owned_indices[index]]["metadata"],
+                    "page": self.records[owned_indices[index]]["metadata"].get("page") or None,
+                },
+                "score": float(scores[index]),
+            }
+            for index in np.argsort(scores)[::-1]
+        ]
+
     def documents(self, owner_id: str) -> list[dict[str, Any]]:
         self._ensure_loaded()
         return [

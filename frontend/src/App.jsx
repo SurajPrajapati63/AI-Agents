@@ -7,8 +7,9 @@ import {
 } from 'lucide-react'
 import AuthPage from './Auth.jsx'
 import {
-  askQuestion, clearAuthToken, deleteDocument, getDocuments, getCurrentUser, getAuthToken,
-  getConversations, logout as logoutRequest, saveConversations, uploadDocuments,
+  clearAuthToken, createConversation, deleteConversation as deleteConversationRequest,
+  deleteDocument, getConversationMessages, getCurrentUser, getDocuments, getAuthToken,
+  listConversations, logout as logoutRequest, sendConversationMessage, uploadDocuments,
 } from './services/api'
 import './App.css'
 
@@ -16,36 +17,51 @@ function newConversation() {
   return { id: crypto.randomUUID(), title: 'New conversation', messages: [] }
 }
 
-function formatDate(value) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(value)
-}
-
 function App() {
   const [conversations, setConversations] = useState(() => [newConversation()])
-  const [conversationsReady, setConversationsReady] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [documents, setDocuments] = useState([])
   const [question, setQuestion] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState(null)
+  const [toast, setToast] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(() => Boolean(getAuthToken()))
   const composerFileInputRef = useRef(null)
   const chatScrollRef = useRef(null)
   const messagesEndRef = useRef(null)
+  const toastTimerRef = useRef(null)
 
   const selectedId = activeId || conversations[0].id
   const activeConversation = conversations.find((conversation) => conversation.id === selectedId) || conversations[0]
 
-  useEffect(() => {
-    if (!user || !conversationsReady) return undefined
-    const timeout = setTimeout(() => {
-      saveConversations(conversations).catch(() => {})
-    }, 400)
-    return () => clearTimeout(timeout)
-  }, [conversations, user])
+  function showToast(nextToast) {
+    setToast((current) => current?.type === nextToast.type && current.text === nextToast.text ? current : nextToast)
+    window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 3200)
+  }
+
+  async function loadConversations() {
+    const payload = await listConversations()
+    const loaded = await Promise.all((payload.conversations || []).map(async (summary) => {
+      const history = await getConversationMessages(summary.session_id)
+      return {
+        id: summary.session_id,
+        title: summary.title || 'New conversation',
+        messages: (history.messages || []).map((message) => ({
+          id: message.message_id || crypto.randomUUID(),
+          role: message.role,
+          content: message.content,
+        })),
+      }
+    }))
+    const nextConversations = loaded.length
+      ? loaded
+      : [{ ...newConversation(), id: (await createConversation()).session_id }]
+    setConversations(nextConversations)
+    setActiveId(nextConversations[0].id)
+  }
 
   useEffect(() => {
     let active = true
@@ -53,29 +69,16 @@ function App() {
     if (!token) {
       return undefined
     }
-    setConversationsReady(false)
 
     getCurrentUser()
       .then((payload) => {
         if (!active) return undefined
         setUser(payload.user)
-        return getConversations()
-      })
-      .then((payload) => {
-        if (active) {
-          const savedConversations = payload && Array.isArray(payload.conversations)
-            ? payload.conversations
-            : []
-          const nextConversations = savedConversations.length ? savedConversations : [newConversation()]
-          setConversations(nextConversations)
-          setActiveId(nextConversations[0].id)
-          setConversationsReady(true)
-        }
+        return loadConversations()
       })
       .catch(() => {
         clearAuthToken()
         setConversations([newConversation()])
-        setConversationsReady(false)
       })
       .finally(() => {
         if (active) setAuthLoading(false)
@@ -85,7 +88,6 @@ function App() {
       clearAuthToken()
       setUser(null)
       setConversations([newConversation()])
-      setConversationsReady(false)
       setAuthLoading(false)
     }
     window.addEventListener('sourcewise-auth-expired', handleAuthExpired)
@@ -94,6 +96,8 @@ function App() {
       window.removeEventListener('sourcewise-auth-expired', handleAuthExpired)
     }
   }, [])
+
+  useEffect(() => () => window.clearTimeout(toastTimerRef.current), [])
 
   useEffect(() => {
     if (!user) return undefined
@@ -123,29 +127,41 @@ function App() {
     )))
   }
 
-  function startNewChat() {
-    const conversation = newConversation()
-    setConversations((current) => [conversation, ...current])
-    setActiveId(conversation.id)
-    setQuestion('')
-    setMobileOpen(false)
+  async function startNewChat() {
+    try {
+      const created = await createConversation()
+      const conversation = { ...newConversation(), id: created.session_id, title: created.title }
+      setConversations((current) => [conversation, ...current])
+      setActiveId(conversation.id)
+      setQuestion('')
+      setMobileOpen(false)
+    } catch (error) {
+      showToast({ type: 'error', text: error.message || 'Unable to create a new chat.' })
+    }
   }
 
-  function deleteConversation(conversationId) {
+  async function deleteConversation(conversationId) {
     const conversation = conversations.find((item) => item.id === conversationId)
     if (!conversation || !window.confirm(`Delete "${conversation.title}"?`)) return
 
-    const remaining = conversations.filter((item) => item.id !== conversationId)
-    const nextConversations = remaining.length ? remaining : [newConversation()]
-    setConversations(nextConversations)
-    if (conversationId === selectedId) setActiveId(nextConversations[0].id)
+    try {
+      await deleteConversationRequest(conversationId)
+      const remaining = conversations.filter((item) => item.id !== conversationId)
+      const replacement = remaining.length ? null : await createConversation()
+      const nextConversations = remaining.length
+        ? remaining
+        : [{ ...newConversation(), id: replacement.session_id, title: replacement.title }]
+      setConversations(nextConversations)
+      if (conversationId === selectedId) setActiveId(nextConversations[0].id)
+    } catch (error) {
+      showToast({ type: 'error', text: error.message || 'Unable to delete that chat.' })
+    }
   }
 
   function handleAuthenticated(authUser) {
-    setConversations([newConversation()])
-    setConversationsReady(true)
     setUser(authUser)
     setAuthLoading(false)
+    loadConversations().catch((error) => showToast({ type: 'error', text: error.message || 'Unable to load conversations.' }))
   }
 
   async function handleLogout() {
@@ -157,12 +173,12 @@ function App() {
       clearAuthToken()
       setAuthLoading(false)
       setConversations([newConversation()])
-      setConversationsReady(false)
       setActiveId(null)
       setDocuments([])
       setQuestion('')
       setStatus(null)
       setMobileOpen(false)
+      showToast({ type: 'success', text: 'Logged out successfully!' })
     }
   }
 
@@ -173,7 +189,6 @@ function App() {
     if (files.length !== supported.length) setStatus({ type: 'error', text: 'Only PDF and TXT files can be uploaded.' })
     if (!supported.length) return
 
-    setIsUploading(true)
     setStatus({ type: 'loading', text: 'Uploading and generating embeddings...' })
     try {
       const payload = await uploadDocuments(supported)
@@ -181,8 +196,6 @@ function App() {
       setStatus({ type: 'success', text: 'Documents stored successfully.' })
     } catch (error) {
       setStatus({ type: 'error', text: error.message })
-    } finally {
-      setIsUploading(false)
     }
   }
 
@@ -201,13 +214,7 @@ function App() {
     event?.preventDefault()
     const trimmed = question.trim()
     if (!trimmed || isSending) return
-    if (!documents.length) {
-      setStatus({ type: 'error', text: 'Upload a PDF or TXT document before asking a question.' })
-      return
-    }
-
     const userMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
-    const history = activeConversation.messages.map(({ role, content }) => ({ role, content }))
     updateActiveConversation((conversation) => ({
       ...conversation,
       title: conversation.messages.length ? conversation.title : trimmed.slice(0, 38) + (trimmed.length > 38 ? '...' : ''),
@@ -218,7 +225,7 @@ function App() {
     setStatus(null)
 
     try {
-      const payload = await askQuestion(trimmed, history)
+      const payload = await sendConversationMessage(selectedId, trimmed)
       updateActiveConversation((conversation) => ({
         ...conversation,
         messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }],
@@ -243,7 +250,7 @@ function App() {
   if (authLoading) {
     return <div className="auth-loading-screen"><div className="auth-loading-mark"><Sparkles size={22} /></div><LoaderCircle className="spin" size={20} /><p>Opening your workspace...</p></div>
   }
-  if (!user) return <AuthPage onAuthenticated={handleAuthenticated} />
+  if (!user) return <><AuthPage onAuthenticated={handleAuthenticated} onToast={showToast} />{toast && <div className={`toast ${toast.type}`} role="status">{toast.text}</div>}</>
 
   return (
     <div className="app-shell">
@@ -255,7 +262,7 @@ function App() {
         </div>
         <button className="new-chat-button" onClick={startNewChat}><MessageSquarePlus size={17} /> New chat</button>
 
-        <section className="sidebar-section">
+        <section className="sidebar-section conversations-section">
           <div className="section-label"><MessageSquarePlus size={14} /> Conversations</div>
           <div className="conversation-list">
             {conversations.filter((conversation) => conversation.messages.length > 0).map((conversation) => (
@@ -320,6 +327,7 @@ function App() {
           <p className="composer-hint">Enter to send · Shift + Enter for a new line</p>
         </footer>
       </main>
+      {toast && <div className={`toast ${toast.type}`} role="status">{toast.text}</div>}
     </div>
   )
 }

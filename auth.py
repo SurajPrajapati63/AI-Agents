@@ -106,6 +106,20 @@ def ensure_indexes(database: Database) -> None:
         )
         database.sessions.create_index("token_hash", unique=True, name="token_hash_unique")
         database.sessions.create_index("expires_at", expireAfterSeconds=0, name="sessions_expiry")
+        database.conversations.create_index(
+            [("user_id", 1), ("session_id", 1)],
+            unique=True,
+            name="conversation_owner_session_unique",
+        )
+        database.messages.create_index(
+            [("user_id", 1), ("session_id", 1), ("timestamp", 1)],
+            name="messages_owner_session_time",
+        )
+        database.memories.create_index(
+            [("user_id", 1), ("kind", 1), ("fact_key", 1)],
+            unique=True,
+            name="memory_owner_key_unique",
+        )
         _indexes_ready = True
 
 
