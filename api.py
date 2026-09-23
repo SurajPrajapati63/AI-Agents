@@ -160,7 +160,7 @@ async def upload_documents(
             content = await upload.read()
             if len(content) > MAX_FILE_SIZE:
                 raise HTTPException(status_code=413, detail=f"{filename} exceeds the file size limit.")
-            processed.append(get_store().add_document(filename, content))
+            processed.append(get_store().add_document(filename, content, user["id"]))
     except HTTPException:
         raise
     except Exception as error:
@@ -182,7 +182,7 @@ def ask_question(
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    retrieved = get_store().retrieve(question)
+    retrieved = get_store().retrieve(question, user["id"])
     if not retrieved:
         return {
             "success": True,
@@ -223,7 +223,7 @@ def ask_question(
 
 @app.get("/documents")
 def list_documents(user: Annotated[dict, Depends(get_current_user)]) -> dict:
-    return {"success": True, "documents": get_store().documents()}
+    return {"success": True, "documents": get_store().documents(user["id"])}
 
 
 @app.delete("/documents/{document_id}")
@@ -231,6 +231,6 @@ def delete_document(
     document_id: str,
     user: Annotated[dict, Depends(get_current_user)],
 ) -> dict[str, object]:
-    if not get_store().delete_document(document_id):
+    if not get_store().delete_document(document_id, user["id"]):
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"success": True, "message": "Document deleted successfully"}

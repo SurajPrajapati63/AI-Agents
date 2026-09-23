@@ -141,7 +141,7 @@ class VectorDocumentStore:
             np.save(file, self.embeddings)
         embeddings_tmp.replace(EMBEDDINGS_PATH)
 
-    def add_document(self, filename: str, content: bytes) -> dict[str, Any]:
+    def add_document(self, filename: str, content: bytes, owner_id: str) -> dict[str, Any]:
         self._ensure_loaded()
         if not content:
             raise ValueError("The uploaded file is empty.")
@@ -166,6 +166,7 @@ class VectorDocumentStore:
         metadatas = [
             {
                 "document_id": document_id,
+                "owner_id": owner_id,
                 "filename": _safe_filename(filename),
                 "file_type": suffix[1:],
                 "page": page if page is not None else -1,
@@ -186,6 +187,7 @@ class VectorDocumentStore:
 
         document = {
             "id": document_id,
+            "owner_id": owner_id,
             "filename": _safe_filename(filename),
             "file_type": suffix[1:],
             "chunks": len(records),
@@ -197,9 +199,16 @@ class VectorDocumentStore:
         self._save()
         return document
 
-    def retrieve(self, question: str, top_k: int = 3) -> list[dict[str, Any]]:
+    def retrieve(self, question: str, owner_id: str, top_k: int = 3) -> list[dict[str, Any]]:
         self._ensure_loaded()
         if not question.strip() or not self.records:
+            return []
+        owned_indices = [
+            index for index, record in enumerate(self.records)
+            if record["metadata"].get("owner_id") == owner_id
+        ]
+        owned_records = [self.records[index] for index in owned_indices]
+        if not owned_records:
             return []
         query_vector = self._embed([question])[0]
         if self.embeddings.shape[1] != query_vector.shape[0]:
@@ -207,13 +216,14 @@ class VectorDocumentStore:
                 "Stored embeddings use a different embedding model. "
                 "Delete vector_store/ and upload the documents again."
             )
-        semantic_scores = self.embeddings @ query_vector
+        owned_embeddings = self.embeddings[np.asarray(owned_indices)]
+        semantic_scores = owned_embeddings @ query_vector
         question_terms = set(re.findall(r"[a-z0-9]+", question.lower()))
         lexical_scores = np.asarray(
             [
                 len(question_terms & set(re.findall(r"[a-z0-9]+", record["text"].lower())))
                 / max(len(question_terms), 1)
-                for record in self.records
+                for record in owned_records
             ],
             dtype=np.float32,
         )
@@ -221,26 +231,31 @@ class VectorDocumentStore:
         best_indices = np.argsort(scores)[::-1][:top_k]
         return [
             {
-                "text": self.records[index]["text"],
+                "text": owned_records[index]["text"],
                 "metadata": {
-                    **self.records[index]["metadata"],
-                    "page": self.records[index]["metadata"].get("page") or None,
+                    **owned_records[index]["metadata"],
+                    "page": owned_records[index]["metadata"].get("page") or None,
                 },
                 "score": float(scores[index]),
             }
             for index in best_indices
         ]
 
-    def delete_document(self, document_id: str) -> bool:
+    def delete_document(self, document_id: str, owner_id: str) -> bool:
         self._ensure_loaded()
-        if not self.registry.remove(document_id):
+        document = self.registry.documents.get(document_id)
+        if not document or document.get("owner_id") != owner_id:
             return False
+        self.registry.remove(document_id)
         keep = [record["metadata"]["document_id"] != document_id for record in self.records]
         self.records = [record for record, should_keep in zip(self.records, keep) if should_keep]
         self.embeddings = self.embeddings[np.asarray(keep, dtype=bool)]
         self._save()
         return True
 
-    def documents(self) -> list[dict[str, Any]]:
+    def documents(self, owner_id: str) -> list[dict[str, Any]]:
         self._ensure_loaded()
-        return self.registry.all()
+        return [
+            document for document in self.registry.all()
+            if document.get("owner_id") == owner_id
+        ]

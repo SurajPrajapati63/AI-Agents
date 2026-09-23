@@ -22,6 +22,7 @@ function formatDate(value) {
 
 function App() {
   const [conversations, setConversations] = useState(() => [newConversation()])
+  const [conversationsReady, setConversationsReady] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [documents, setDocuments] = useState([])
   const [selectedFiles, setSelectedFiles] = useState([])
@@ -40,7 +41,7 @@ function App() {
   const activeConversation = conversations.find((conversation) => conversation.id === selectedId) || conversations[0]
 
   useEffect(() => {
-    if (!user) return undefined
+    if (!user || !conversationsReady) return undefined
     const timeout = setTimeout(() => {
       saveConversations(conversations).catch(() => {})
     }, 400)
@@ -53,6 +54,7 @@ function App() {
     if (!token) {
       return undefined
     }
+    setConversationsReady(false)
 
     getCurrentUser()
       .then((payload) => {
@@ -61,13 +63,20 @@ function App() {
         return getConversations()
       })
       .then((payload) => {
-        if (active && payload && Array.isArray(payload.conversations) && payload.conversations.length) {
-          setConversations(payload.conversations)
-          setActiveId(payload.conversations[0].id)
+        if (active) {
+          const savedConversations = payload && Array.isArray(payload.conversations)
+            ? payload.conversations
+            : []
+          const nextConversations = savedConversations.length ? savedConversations : [newConversation()]
+          setConversations(nextConversations)
+          setActiveId(nextConversations[0].id)
+          setConversationsReady(true)
         }
       })
       .catch(() => {
         clearAuthToken()
+        setConversations([newConversation()])
+        setConversationsReady(false)
       })
       .finally(() => {
         if (active) setAuthLoading(false)
@@ -76,6 +85,8 @@ function App() {
     function handleAuthExpired() {
       clearAuthToken()
       setUser(null)
+      setConversations([newConversation()])
+      setConversationsReady(false)
       setAuthLoading(false)
     }
     window.addEventListener('sourcewise-auth-expired', handleAuthExpired)
@@ -132,6 +143,8 @@ function App() {
   }
 
   function handleAuthenticated(authUser) {
+    setConversations([newConversation()])
+    setConversationsReady(true)
     setUser(authUser)
     setAuthLoading(false)
   }
@@ -145,6 +158,7 @@ function App() {
       clearAuthToken()
       setAuthLoading(false)
       setConversations([newConversation()])
+      setConversationsReady(false)
       setActiveId(null)
       setDocuments([])
       setSelectedFiles([])
