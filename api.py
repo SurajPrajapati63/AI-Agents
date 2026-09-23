@@ -28,6 +28,7 @@ from auth import (
 from main import (
     DEFAULT_LLM_MODEL,
     GENERAL_RESPONSE,
+    NOT_FOUND,
     calculate_explicit_math,
     classify_question,
     generate_answer,
@@ -128,6 +129,78 @@ def _conversation_messages(database, user: dict, session_id: str) -> list[dict]:
     if not database.conversations.find_one(_conversation_filter(user, session_id)):
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return list(database.messages.find(_conversation_filter(user, session_id), {"_id": 0}).sort("timestamp", 1))
+
+
+CALCULATION_FALLBACK = "I couldn't calculate that because the required values or rule were not provided."
+
+
+def _build_sources(retrieved: list[dict]) -> list[dict]:
+    """Deduplicate retrieved chunks into citation payloads."""
+    sources: list[dict] = []
+    seen: set[str] = set()
+    for item in retrieved:
+        metadata = item["metadata"]
+        if metadata["chunk_id"] in seen:
+            continue
+        seen.add(metadata["chunk_id"])
+        sources.append(
+            {
+                "document_id": metadata["document_id"],
+                "filename": metadata["filename"],
+                "page": metadata.get("page"),
+                "chunk_id": metadata["chunk_id"],
+            }
+        )
+    return sources
+
+
+def _answer_question(
+    question: str,
+    user: dict,
+    history: list[dict],
+    memories: list[str],
+) -> tuple[str, list[dict]]:
+    """Route one question through the classifier and return (answer, retrieved chunks).
+
+    Question -> Classifier -> General | Document | Count | Compare
+    """
+    category = classify_question(question)
+
+    # General / Calculation -> Direct Answer (no retrieval, no LLM)
+    if category == "GENERAL/META":
+        return GENERAL_RESPONSE, []
+    if category == "CALCULATION":
+        return calculate_explicit_math(question) or CALCULATION_FALLBACK, []
+
+    # Count / Aggregation / Compare -> Retrieve all -> calculate in the LLM
+    if category in {"COUNT", "AGGREGATION", "COMPARISON"}:
+        retrieved = get_store().retrieve_all(question, user["id"])
+    else:
+        # Document QA -> RAG search (top-k) -> LLM
+        retrieved = get_store().retrieve(question, user["id"])
+
+    if retrieved:
+        answer = generate_answer(
+            question,
+            [item["text"] for item in retrieved],
+            DEFAULT_LLM_MODEL,
+            history,
+            memories,
+            category,
+        )
+        return answer, retrieved
+
+    # Nothing retrieved -> answer from this conversation when possible
+    if history or memories:
+        return generate_answer(
+            question,
+            [],
+            DEFAULT_LLM_MODEL,
+            history,
+            memories,
+            "CONVERSATION",
+        ), []
+    return NOT_FOUND, []
 
 
 @app.get("/health")
@@ -245,44 +318,13 @@ def send_conversation_message(
             "content": question, "timestamp": now, "message_id": f"msg_{uuid4().hex}",
         })
         _remember_explicit_fact(database, user["id"], question)
-        category = classify_question(question)
-        if category == "GENERAL/META":
-            answer = GENERAL_RESPONSE
-            retrieved = []
-        elif category == "CALCULATION":
-            answer = calculate_explicit_math(question)
-            retrieved = []
-            if answer is None:
-                answer = "I couldn't calculate that because the required values or rule were not provided."
-        else:
-            retrieved = (
-                get_store().retrieve_all(question, user["id"])
-                if category in {"COUNT", "AGGREGATION", "COMPARISON"}
-                else get_store().retrieve(question, user["id"])
-            )
         history = [{"role": item["role"], "content": item["content"]} for item in messages[-50:]]
-        if category not in {"GENERAL/META", "CALCULATION"}:
-            memories = _load_memories(database, user["id"])
-            if retrieved:
-                answer = generate_answer(
-                    question,
-                    [item["text"] for item in retrieved],
-                    DEFAULT_LLM_MODEL,
-                    history,
-                    memories,
-                    category,
-                )
-            elif history or memories:
-                answer = generate_answer(
-                    question,
-                    [],
-                    DEFAULT_LLM_MODEL,
-                    history,
-                    memories,
-                    "CONVERSATION",
-                )
-            else:
-                answer = "I couldn't find that information in the uploaded documents."
+        answer, retrieved = _answer_question(
+            question,
+            user,
+            history,
+            _load_memories(database, user["id"]),
+        )
         database.messages.insert_one({
             "user_id": user["id"], "session_id": session_id, "role": "assistant",
             "content": answer, "timestamp": datetime.now(timezone.utc), "message_id": f"msg_{uuid4().hex}",
@@ -291,20 +333,7 @@ def send_conversation_message(
             _conversation_filter(user, session_id),
             {"$set": {"updated_at": datetime.now(timezone.utc), "title": question[:120]}},
         )
-        sources = []
-        seen = set()
-        for item in retrieved:
-            metadata = item["metadata"]
-            if metadata["chunk_id"] in seen:
-                continue
-            seen.add(metadata["chunk_id"])
-            sources.append({
-                "document_id": metadata["document_id"],
-                "filename": metadata["filename"],
-                "page": metadata.get("page"),
-                "chunk_id": metadata["chunk_id"],
-            })
-        return {"success": True, "session_id": session_id, "answer": answer, "sources": sources}
+        return {"success": True, "session_id": session_id, "answer": answer, "sources": _build_sources(retrieved)}
     except HTTPException:
         raise
     except PyMongoError as error:
@@ -367,71 +396,17 @@ def ask_question(
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    category = classify_question(question)
-    if category == "GENERAL/META":
-        return {"success": True, "question": question, "answer": GENERAL_RESPONSE, "sources": []}
-    if category == "CALCULATION":
-        answer = calculate_explicit_math(question)
-        return {
-            "success": True,
-            "question": question,
-            "answer": answer or "I couldn't calculate that because the required values or rule were not provided.",
-            "sources": [],
-        }
-    retrieved = (
-        get_store().retrieve_all(question, user["id"])
-        if category in {"COUNT", "AGGREGATION", "COMPARISON"}
-        else get_store().retrieve(question, user["id"])
-    )
-    if not retrieved:
-        if request.chat_history:
-            try:
-                answer = generate_answer(
-                    question,
-                    [],
-                    DEFAULT_LLM_MODEL,
-                    request.chat_history,
-                    operation="CONVERSATION",
-                )
-            except Exception as error:
-                raise HTTPException(status_code=502, detail=f"Answer generation failed: {error}") from error
-            return {"success": True, "question": question, "answer": answer, "sources": []}
-        return {
-            "success": True,
-            "question": question,
-            "answer": "I couldn't find that information in the uploaded documents.",
-            "sources": [],
-        }
-
     try:
-        answer = generate_answer(
-            question,
-            [item["text"] for item in retrieved],
-            DEFAULT_LLM_MODEL,
-            request.chat_history,
-            operation=category,
-        )
+        answer, retrieved = _answer_question(question, user, request.chat_history, [])
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"Answer generation failed: {error}") from error
 
-    sources = []
-    seen = set()
-    for item in retrieved:
-        metadata = item["metadata"]
-        source_key = metadata["chunk_id"]
-        if source_key in seen:
-            continue
-        seen.add(source_key)
-        sources.append(
-            {
-                "document_id": metadata["document_id"],
-                "filename": metadata["filename"],
-                "page": metadata.get("page"),
-                "chunk_id": metadata["chunk_id"],
-            }
-        )
-
-    return {"success": True, "question": question, "answer": answer, "sources": sources}
+    return {
+        "success": True,
+        "question": question,
+        "answer": answer,
+        "sources": _build_sources(retrieved),
+    }
 
 
 @app.get("/documents")
