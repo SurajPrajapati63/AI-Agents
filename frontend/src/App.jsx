@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Bot, Brain, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
+  Bot, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
   MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
 } from 'lucide-react'
 import AuthPage from './Auth.jsx'
 import {
   askQuestion, clearAuthToken, createConversation, deleteConversation as deleteConversationRequest,
-  deleteDocument, deleteMemory, getConversationMessages, getCurrentUser, getDocuments, getAuthToken,
-  getMemories, listConversations, logout as logoutRequest, sendConversationMessage, uploadDocuments,
+  deleteDocument, getConversationMessages, getCurrentUser, getDocuments, getAuthToken,
+  listConversations, logout as logoutRequest, sendConversationMessage, uploadDocuments,
 } from './services/api'
 import './App.css'
 
@@ -21,7 +21,6 @@ function App() {
   const [conversations, setConversations] = useState(() => [newConversation()])
   const [activeId, setActiveId] = useState(null)
   const [documents, setDocuments] = useState([])
-  const [memories, setMemories] = useState([])
   const [question, setQuestion] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [status, setStatus] = useState(null)
@@ -71,16 +70,6 @@ function App() {
     setActiveId(nextConversations[0].id)
   }
 
-  async function loadMemories() {
-    try {
-      const payload = await getMemories()
-      setMemories(payload.memories || [])
-    } catch {
-      // Older backends without /memory simply show no list.
-      setMemories([])
-    }
-  }
-
   useEffect(() => {
     let active = true
     const token = getAuthToken()
@@ -92,7 +81,6 @@ function App() {
       .then((payload) => {
         if (!active) return undefined
         setUser(payload.user)
-        loadMemories()
         return loadConversations()
       })
       .catch((error) => {
@@ -112,7 +100,6 @@ function App() {
       clearAuthToken()
       setUser(null)
       setConversations([newConversation()])
-      setMemories([])
       setAuthLoading(false)
     }
     window.addEventListener('sourcewise-auth-expired', handleAuthExpired)
@@ -219,7 +206,6 @@ function App() {
   function handleAuthenticated(authUser) {
     setUser(authUser)
     setAuthLoading(false)
-    loadMemories()
     loadConversations().catch((error) => showToast({ type: 'error', text: error.message || 'Unable to load conversations.' }))
   }
 
@@ -234,7 +220,6 @@ function App() {
       setConversations([newConversation()])
       setActiveId(null)
       setDocuments([])
-      setMemories([])
       setQuestion('')
       setStatus(null)
       setMobileOpen(false)
@@ -315,17 +300,6 @@ function App() {
       }))
     } finally {
       setIsSending(false)
-      // A new fact may have just been saved; refresh the sidebar list.
-      loadMemories()
-    }
-  }
-
-  async function handleDeleteMemory(memory) {
-    try {
-      await deleteMemory(memory.id)
-      setMemories((current) => current.filter((item) => item.id !== memory.id))
-    } catch (error) {
-      showToast({ type: 'error', text: error.message || 'Unable to delete that memory.' })
     }
   }
 
@@ -372,19 +346,6 @@ function App() {
             {!documents.length && <span className="empty-note">No documents stored yet.</span>}
           </div>
         </section>
-        <section className="sidebar-section memories-section">
-          <div className="section-label"><Brain size={14} /> Saved memories</div>
-          <div className="memory-list">
-            {memories.map((memory) => (
-              <div className="memory-row" key={memory.id}>
-                <div className="memory-text"><strong>{memory.memory_key}</strong><span>{memory.memory_value}</span></div>
-                <button type="button" className="icon-button danger memory-delete" onClick={() => handleDeleteMemory(memory)} aria-label={`Forget ${memory.memory_key}`}><Trash2 size={14} /></button>
-              </div>
-            ))}
-            {!memories.length && <span className="empty-note">Share a fact like &quot;My name is Suraj&quot; and it will be remembered in every new chat.</span>}
-          </div>
-        </section>
-
         <div className="sidebar-footer"><ShieldCheck size={14} /> Chats are saved for future context</div>
       </aside>
 

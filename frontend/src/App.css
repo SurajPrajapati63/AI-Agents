@@ -31,6 +31,9 @@
 .toast.error { color: #9b4939; background: #fae9e4; border-color: #f0c9be; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width:760px) { .toast { top: 12px; right: 16px; left: 16px; max-width: none; text-align: center; } }
+/* Message bubbles follow their content and wrap within the available chat width. */
+.message-content { display: table; width: fit-content; max-width: 100%; box-sizing: border-box; padding: 11px 15px; border-radius: 4px 16px 16px 16px; color: #364451; background: #fff; text-align: left; overflow-wrap: anywhere; }
+.message-row.user .message-content { display: table; width: fit-content; max-width: 100%; margin-left: auto; border-radius: 16px 4px 16px 16px; color: #194640; background: var(--teal-soft); }
 /* Persistent user memories: saved per user, not per chat. */
 .memories-section { margin-top: 4px; }
 .memory-list { display: grid; min-width: 0; gap: 3px; max-height: 190px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #b6cbc5 transparent; }
