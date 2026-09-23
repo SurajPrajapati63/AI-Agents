@@ -45,15 +45,21 @@ function App() {
   async function loadConversations() {
     const payload = await listConversations()
     const loaded = await Promise.all((payload.conversations || []).map(async (summary) => {
-      const history = await getConversationMessages(summary.session_id)
-      return {
-        id: summary.session_id,
-        title: summary.title || 'New conversation',
-        messages: (history.messages || []).map((message) => ({
+      let messages = []
+      try {
+        const history = await getConversationMessages(summary.session_id)
+        messages = (history.messages || []).map((message) => ({
           id: message.message_id || crypto.randomUUID(),
           role: message.role,
           content: message.content,
-        })),
+        }))
+      } catch {
+        messages = []
+      }
+      return {
+        id: summary.session_id,
+        title: summary.title || 'New conversation',
+        messages,
       }
     }))
     const nextConversations = loaded.length
@@ -76,9 +82,14 @@ function App() {
         setUser(payload.user)
         return loadConversations()
       })
-      .catch(() => {
-        clearAuthToken()
-        setConversations([newConversation()])
+      .catch((error) => {
+        if (!active) return undefined
+        if (error?.status === 401) {
+          clearAuthToken()
+          setConversations([newConversation()])
+        } else {
+          showToast({ type: 'error', text: error.message || 'Unable to load conversations.' })
+        }
       })
       .finally(() => {
         if (active) setAuthLoading(false)
@@ -121,10 +132,27 @@ function App() {
     })
   }, [activeConversation?.messages, isSending])
 
-  function updateActiveConversation(update) {
+  function isServerConversation(conversationId) {
+    return typeof conversationId === 'string' && conversationId.startsWith('chat_')
+  }
+
+  function updateConversation(conversationId, update) {
     setConversations((current) => current.map((conversation) => (
-      conversation.id === selectedId ? update(conversation) : conversation
+      conversation.id === conversationId ? update(conversation) : conversation
     )))
+  }
+
+  async function ensureServerConversation(conversationId, title) {
+    if (isServerConversation(conversationId)) return conversationId
+    const created = await createConversation(title)
+    const serverId = created.session_id
+    setConversations((current) => current.map((conversation) => (
+      conversation.id === conversationId
+        ? { ...conversation, id: serverId, title: created.title || conversation.title }
+        : conversation
+    )))
+    setActiveId(serverId)
+    return serverId
   }
 
   async function startNewChat() {
@@ -145,7 +173,7 @@ function App() {
     if (!conversation || !window.confirm(`Delete "${conversation.title}"?`)) return
 
     try {
-      await deleteConversationRequest(conversationId)
+      if (isServerConversation(conversationId)) await deleteConversationRequest(conversationId)
       const remaining = conversations.filter((item) => item.id !== conversationId)
       const replacement = remaining.length ? null : await createConversation()
       const nextConversations = remaining.length
@@ -214,24 +242,35 @@ function App() {
     event?.preventDefault()
     const trimmed = question.trim()
     if (!trimmed || isSending) return
+
+    setIsSending(true)
+    setStatus(null)
+
+    let conversationId = selectedId
+    try {
+      conversationId = await ensureServerConversation(conversationId, activeConversation.title)
+    } catch (error) {
+      setIsSending(false)
+      showToast({ type: 'error', text: error.message || 'Unable to start this conversation.' })
+      return
+    }
+
     const userMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
-    updateActiveConversation((conversation) => ({
+    updateConversation(conversationId, (conversation) => ({
       ...conversation,
       title: conversation.messages.length ? conversation.title : trimmed.slice(0, 38) + (trimmed.length > 38 ? '...' : ''),
       messages: [...conversation.messages, userMessage],
     }))
     setQuestion('')
-    setIsSending(true)
-    setStatus(null)
 
     try {
-      const payload = await sendConversationMessage(selectedId, trimmed)
-      updateActiveConversation((conversation) => ({
+      const payload = await sendConversationMessage(conversationId, trimmed)
+      updateConversation(conversationId, (conversation) => ({
         ...conversation,
         messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }],
       }))
     } catch (error) {
-      updateActiveConversation((conversation) => ({
+      updateConversation(conversationId, (conversation) => ({
         ...conversation,
         messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: `I couldn't complete that request.\n\n${error.message}`, error: true }],
       }))
