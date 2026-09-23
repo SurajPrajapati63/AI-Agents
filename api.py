@@ -47,9 +47,14 @@ allowed_origins.update(
         "https://ai-agents-inky-two.vercel.app",
     }
 )
+allowed_origin_regex = os.environ.get(
+    "CORS_ORIGIN_REGEX",
+    r"https://ai-agents-[a-z0-9-]+-suraj-prajapatis-projects-b7c1f72a\.vercel\.app",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(allowed_origins),
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
