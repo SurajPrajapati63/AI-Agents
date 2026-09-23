@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   Bot, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
-  MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UploadCloud, UserRound, X,
+  MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
 } from 'lucide-react'
 import AuthPage from './Auth.jsx'
 import {
@@ -25,7 +25,6 @@ function App() {
   const [conversationsReady, setConversationsReady] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [documents, setDocuments] = useState([])
-  const [selectedFiles, setSelectedFiles] = useState([])
   const [question, setQuestion] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -161,29 +160,24 @@ function App() {
       setConversationsReady(false)
       setActiveId(null)
       setDocuments([])
-      setSelectedFiles([])
       setQuestion('')
       setStatus(null)
       setMobileOpen(false)
     }
   }
 
-  function selectFiles(event) {
+  async function selectFiles(event) {
     const files = Array.from(event.target.files || [])
     const supported = files.filter((file) => /\.(pdf|txt)$/i.test(file.name))
-    setSelectedFiles(supported)
-    if (files.length !== supported.length) setStatus({ type: 'error', text: 'Only PDF and TXT files can be uploaded.' })
     event.target.value = ''
-  }
+    if (files.length !== supported.length) setStatus({ type: 'error', text: 'Only PDF and TXT files can be uploaded.' })
+    if (!supported.length) return
 
-  async function handleUpload() {
-    if (!selectedFiles.length) return
     setIsUploading(true)
     setStatus({ type: 'loading', text: 'Uploading and generating embeddings...' })
     try {
-      const payload = await uploadDocuments(selectedFiles)
+      const payload = await uploadDocuments(supported)
       setDocuments((current) => [...(payload.documents || []), ...current])
-      setSelectedFiles([])
       setStatus({ type: 'success', text: 'Documents stored successfully.' })
     } catch (error) {
       setStatus({ type: 'error', text: error.message })
@@ -317,7 +311,6 @@ function App() {
 
         <footer className="composer-area">
           {status && <div className={`status-banner ${status.type}`}>{status.type === 'loading' && <LoaderCircle className="spin" size={14} />}{status.type === 'success' && <Check size={14} />}{status.text}</div>}
-          {selectedFiles.length > 0 && <div className="composer-files">{selectedFiles.map((file) => <span key={`${file.name}-${file.size}`}><FileText size={13} /> {file.name}</span>)}<button type="button" onClick={handleUpload} disabled={isUploading}>{isUploading ? <LoaderCircle className="spin" size={13} /> : <UploadCloud size={13} />} {isUploading ? 'Processing' : 'Upload'}</button></div>}
           <form className="composer" onSubmit={sendQuestion}>
             <button type="button" className="composer-action" onClick={() => composerFileInputRef.current?.click()} aria-label="Attach documents"><Paperclip size={18} /></button>
             <input ref={composerFileInputRef} className="hidden-file-input" type="file" accept=".pdf,.txt" multiple onChange={selectFiles} />
