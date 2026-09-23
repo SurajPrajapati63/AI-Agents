@@ -2,5 +2,11 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm ci"
+  "installCommand": "npm ci",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://ai-agents-qigt.onrender.com/:path*"
+    }
+  ]
 }

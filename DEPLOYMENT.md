@@ -70,15 +70,9 @@ expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.
 1. Import the repository into Vercel.
 2. Set the Vercel project root directory to `frontend`.
 3. Keep the build command as `npm run build` and output directory as `dist`.
-4. Add the production environment variable:
-
-```text
-API_URL=https://ai-agents-qigt.onrender.com
-```
-
-5. Deploy, then ensure `http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app` is included in the
-   backend's `CORS_ORIGINS` value and redeploy the backend.
+4. Deploy. `frontend/vercel.json` routes `/api/*` requests to the Render API
+   from Vercel, keeping browser requests same-origin and avoiding browser CORS
+   failures. Do not set `API_URL` in Vercel; the client uses `/api`.
 
 The frontend uses `frontend/vercel.json`, `npm ci`, and a production Vite
-build. The API URL uses `API_URL` when provided and otherwise falls back to
-the deployed Render service in production or localhost during development.
+build. During local development, Vite proxies `/api/*` to `http://localhost:8000`.

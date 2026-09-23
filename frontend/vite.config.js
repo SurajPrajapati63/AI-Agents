@@ -3,14 +3,19 @@ import { defineConfig, loadEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiUrl = env.API_URL || (
-    mode === 'development'
-      ? 'http://localhost:8000'
-      : 'https://ai-agents-qigt.onrender.com'
-  )
+  const apiUrl = '/api'
 
   return {
     plugins: [react()],
+    server: {
+      proxy: {
+        '/api': {
+          target: env.API_URL || 'http://localhost:8000',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ''),
+        },
+      },
+    },
     define: {
       'import.meta.env.API_URL': JSON.stringify(apiUrl),
     },

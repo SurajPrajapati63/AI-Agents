@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from groq import RateLimitError
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -197,6 +199,16 @@ def _answer_question(
     return answer, retrieved
 
 
+def _groq_rate_limit_response(error: RateLimitError) -> HTTPException:
+    """Turn Groq quota errors into a useful, retryable API response."""
+    match = re.search(r"try again in ([0-9m.]+s)", str(error), re.IGNORECASE)
+    retry = f" Please try again in {match.group(1)}." if match else " Please try again later."
+    return HTTPException(
+        status_code=429,
+        detail=f"The AI service has reached its Groq usage limit.{retry}",
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "healthy"}
@@ -330,6 +342,8 @@ def send_conversation_message(
         return {"success": True, "session_id": session_id, "answer": answer, "sources": _build_sources(retrieved)}
     except HTTPException:
         raise
+    except RateLimitError as error:
+        raise _groq_rate_limit_response(error) from error
     except PyMongoError as error:
         raise database_error(error) from error
 
@@ -437,6 +451,8 @@ def ask_question(
 
     try:
         answer, retrieved = _answer_question(question, user, request.chat_history, _load_memories(get_database(), user["id"]))
+    except RateLimitError as error:
+        raise _groq_rate_limit_response(error) from error
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"Answer generation failed: {error}") from error
 

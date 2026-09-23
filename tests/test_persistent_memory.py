@@ -16,11 +16,17 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 from uuid import uuid4
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
+
+# Windows consoles default to cp1252, which cannot print the narrow
+# no-break space the model uses in answers.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from dotenv import load_dotenv
 
@@ -52,15 +58,19 @@ def check(label: str, condition: bool, detail: str = "") -> None:
 
 
 def signup(email: str) -> dict:
+    """Create an account and return the Authorization headers to reuse."""
     response = client.post(
         "/auth/signup", json={"email": email, "password": "password123"}
     )
     assert response.status_code == 200, response.text
     payload = response.json()
-    return {
-        "headers": {"Authorization": f"Bearer {payload['token']}"},
-        "user_id": payload["user"]["id"],
-    }
+    return {"Authorization": f"Bearer {payload['token']}"}
+
+
+def user_id(headers: dict) -> str:
+    response = client.get("/auth/me", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()["user"]["id"]
 
 
 def new_chat(headers: dict) -> str:
@@ -72,13 +82,19 @@ def new_chat(headers: dict) -> str:
 
 
 def send(headers: dict, session_id: str, content: str) -> str:
-    response = client.post(
-        f"/conversations/{session_id}/messages",
-        json={"content": content},
-        headers=headers,
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["answer"]
+    """Post one message, waiting out Groq's short usage-limit window if needed."""
+    url = f"/conversations/{session_id}/messages"
+    status, body = 0, ""
+    for _attempt in range(7):
+        response = client.post(url, json={"content": content}, headers=headers)
+        status, body = response.status_code, response.text
+        if status == 200:
+            return response.json()["answer"]
+        if not any(flag in body for flag in ("usage limit", "Rate limit", "rate_limit")):
+            break
+        print("    (Groq usage limit reached, waiting 60s...)")
+        time.sleep(60)
+    raise AssertionError(f"{status}: {body}")
 
 
 def memories(headers: dict) -> dict:
@@ -143,9 +159,7 @@ check(
 )
 
 first_memory = next(iter(stored.values()))
-cross_delete = client.delete(
-    f"/memory/{first_memory['id']}", headers=user_b["headers"]
-)
+cross_delete = client.delete(f"/memory/{first_memory['id']}", headers=user_b)
 check(
     "Test 3 - user B cannot delete user A's memory (404)",
     cross_delete.status_code == 404,
@@ -170,9 +184,7 @@ check(
 # --------------------------------------------------------------------- Test 5
 print("\nTest 5: deleting a conversation does not delete memories")
 before_delete = memories(user_a)
-delete_response = client.delete(
-    f"/conversations/{chat_one}", headers=user_a["headers"]
-)
+delete_response = client.delete(f"/conversations/{chat_one}", headers=user_a)
 after_delete = memories(user_a)
 check("Test 5 - conversation was deleted", delete_response.status_code == 200)
 check(
@@ -209,7 +221,7 @@ document = (
 upload = client.post(
     "/upload",
     files={"files": ("refund_policy.txt", document, "text/plain")},
-    headers=user_c["headers"],
+    headers=user_c,
 )
 check("Test 7 - document upload succeeded", upload.status_code == 200, upload.text[:200])
 
@@ -222,7 +234,9 @@ check(
 )
 
 # ------------------------------------------------------------------- the model
-document = db[MEMORY_COLLECTION].find_one({"user_id": user_a["id"], "memory_key": "name"})
+document = db[MEMORY_COLLECTION].find_one(
+    {"user_id": user_id(user_a), "memory_key": "name"}
+)
 required = {"id", "user_id", "memory_key", "memory_value", "created_at", "updated_at"}
 check(
     "Schema - stored record has the required fields",
