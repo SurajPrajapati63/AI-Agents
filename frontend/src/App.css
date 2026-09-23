@@ -31,3 +31,15 @@
 .toast.error { color: #9b4939; background: #fae9e4; border-color: #f0c9be; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width:760px) { .toast { top: 12px; right: 16px; left: 16px; max-width: none; text-align: center; } }
+/* Persistent user memories: saved per user, not per chat. */
+.memories-section { margin-top: 4px; }
+.memory-list { display: grid; min-width: 0; gap: 3px; max-height: 190px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #b6cbc5 transparent; }
+.memory-list::-webkit-scrollbar { width: 6px; }
+.memory-list::-webkit-scrollbar-thumb { border-radius: 8px; background: #b6cbc5; }
+.memory-row { display: flex; align-items: center; gap: 8px; padding: 7px 5px; border-radius: 8px; color: var(--muted); }
+.memory-row:hover { color: var(--teal-dark); background: rgba(255,255,255,.8); }
+.memory-text { display: grid; min-width: 0; flex: 1; gap: 1px; }
+.memory-text strong { overflow: hidden; color: #566272; font-size: .67rem; letter-spacing: .05em; text-transform: uppercase; text-overflow: ellipsis; white-space: nowrap; }
+.memory-text span { overflow: hidden; color: var(--muted); font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
+.memory-delete { flex: 0 0 28px; width: 28px; height: 28px; opacity: .55; }
+.memory-row:hover .memory-delete { opacity: 1; }

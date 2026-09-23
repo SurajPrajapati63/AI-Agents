@@ -2,6 +2,11 @@ const configuredApiUrl = import.meta.env.API_URL?.trim().replace(/\/+$/, '')
 const API_URL = configuredApiUrl
 const TOKEN_STORAGE_KEY = 'sourcewise_auth_token'
 const REQUEST_TIMEOUT_MS = 30000
+const RETRY_DELAY_MS = 2000
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 export function getAuthToken() {
   try {
@@ -25,7 +30,7 @@ export function clearAuthToken() {
   }
 }
 
-async function request(path, options = {}, authenticate = true) {
+async function request(path, options = {}, authenticate = true, isRetry = false) {
   if (!API_URL) {
     throw new Error('The API is not configured. Set API_URL in the Vercel project settings.')
   }
@@ -59,7 +64,15 @@ async function request(path, options = {}, authenticate = true) {
     return payload
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('The request timed out. Please try again.')
-    if (error instanceof TypeError) throw new Error('Unable to reach the backend service.')
+    if (error.status) throw error
+    // Network error, CORS rejection, or a sleeping host (Render cold start) -> retry once.
+    if (!isRetry) {
+      await wait(RETRY_DELAY_MS)
+      return request(path, options, authenticate, true)
+    }
+    if (error instanceof TypeError) {
+      throw new Error('Cannot reach the server. It may be waking up - please try again in a moment.')
+    }
     throw error
   } finally {
     clearTimeout(timeout)
@@ -150,6 +163,14 @@ export function getDocuments() {
 
 export function deleteDocument(id) {
   return request(`/documents/${id}`, { method: 'DELETE' })
+}
+
+export function getMemories() {
+  return request('/memory')
+}
+
+export function deleteMemory(id) {
+  return request(`/memory/${id}`, { method: 'DELETE' })
 }
 
 export function checkHealth() {

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Annotated
@@ -30,6 +29,14 @@ from main import (
     generate_answer,
 )
 from rag_store import VectorDocumentStore
+from memory_store import (
+    KEY_ORDER,
+    delete_memory,
+    list_memories,
+    load_memories,
+    save_memories_from_message,
+    upsert_memory,
+)
 
 
 MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
@@ -96,32 +103,18 @@ class MessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
 
 
+class MemoryRequest(BaseModel):
+    memory_key: str = Field(min_length=1, max_length=64)
+    memory_value: str = Field(min_length=1, max_length=500)
+
+
 def _conversation_filter(user: dict, session_id: str) -> dict[str, str]:
     return {"user_id": user["id"], "session_id": session_id}
 
 
 def _load_memories(database, user_id: str) -> list[str]:
-    return [item["content"] for item in database.memories.find({"user_id": user_id}).sort("updated_at", -1).limit(20)]
-
-
-def _remember_explicit_fact(database, user_id: str, content: str) -> None:
-    patterns = (
-        ("name", r"\bmy name is ([A-Za-z][A-Za-z .'-]{1,80})\b"),
-        ("preference", r"\bi (?:prefer|like|love) ([^.!?\n]{2,120})"),
-        ("interest", r"\bi(?: am|'m) interested in ([^.!?\n]{2,120})"),
-    )
-    now = datetime.now(timezone.utc)
-    for kind, pattern in patterns:
-        match = re.search(pattern, content, re.IGNORECASE)
-        if not match:
-            continue
-        value = match.group(1).strip(" .,!?")
-        fact_key = f"{kind}:{value.lower()}"
-        database.memories.update_one(
-            {"user_id": user_id, "kind": kind, "fact_key": fact_key},
-            {"$set": {"content": f"The user's {kind} is {value}.", "updated_at": now}, "$setOnInsert": {"created_at": now}},
-            upsert=True,
-        )
+    """Persistent facts for this user, injected into every answer."""
+    return load_memories(database, user_id)
 
 
 def _conversation_messages(database, user: dict, session_id: str) -> list[dict]:
@@ -318,7 +311,7 @@ def send_conversation_message(
             "user_id": user["id"], "session_id": session_id, "role": "user",
             "content": question, "timestamp": now, "message_id": f"msg_{uuid4().hex}",
         })
-        _remember_explicit_fact(database, user["id"], question)
+        save_memories_from_message(database, user["id"], question)
         history = _chat_history(database, user, session_id)
         answer, retrieved = _answer_question(
             question,
@@ -355,6 +348,51 @@ def save_conversations(
         return {"success": True}
     except PyMongoError as error:
         raise database_error(error) from error
+
+
+@app.get("/memory")
+def get_memory(user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """List this user's persistent memories. Never returns another user's."""
+    try:
+        return {
+            "success": True,
+            "keys": list(KEY_ORDER),
+            "memories": list_memories(get_database(), user["id"]),
+        }
+    except PyMongoError as error:
+        raise database_error(error) from error
+
+
+@app.post("/memory")
+def create_memory(
+    request: MemoryRequest,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict:
+    """Create or update one persistent memory for the authenticated user."""
+    try:
+        memory = upsert_memory(
+            get_database(), user["id"], request.memory_key, request.memory_value
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except PyMongoError as error:
+        raise database_error(error) from error
+    return {"success": True, "memory": memory}
+
+
+@app.delete("/memory/{memory_id}")
+def remove_memory(
+    memory_id: str,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict:
+    """Delete one memory. The filter always includes user_id, so an id owned by
+    another user cannot match and returns 404."""
+    try:
+        if not delete_memory(get_database(), user["id"], memory_id):
+            raise HTTPException(status_code=404, detail="Memory not found.")
+    except PyMongoError as error:
+        raise database_error(error) from error
+    return {"success": True}
 
 
 @app.post("/upload")

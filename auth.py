@@ -17,6 +17,8 @@ from pymongo.collation import Collation
 from pymongo.database import Database
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+from memory_store import ensure_memory_schema
+
 
 MONGO_SCHEMES = ("mongodb://", "mongodb+srv://")
 
@@ -120,6 +122,7 @@ def ensure_indexes(database: Database) -> None:
             unique=True,
             name="memory_owner_key_unique",
         )
+        ensure_memory_schema(database)
         _indexes_ready = True
 
 
