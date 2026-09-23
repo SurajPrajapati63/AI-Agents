@@ -87,9 +87,17 @@ function App() {
 
   useEffect(() => {
     if (!user) return undefined
-    return getDocuments()
-      .then((payload) => setDocuments(payload.documents || []))
-      .catch(() => setStatus({ type: 'error', text: 'Backend unavailable. Start the API to manage documents.' }))
+    let active = true
+    getDocuments()
+      .then((payload) => {
+        if (active) setDocuments(payload.documents || [])
+      })
+      .catch(() => {
+        if (active) setStatus({ type: 'error', text: 'Backend unavailable. Start the API to manage documents.' })
+      })
+    return () => {
+      active = false
+    }
   }, [user])
 
   useEffect(() => {
