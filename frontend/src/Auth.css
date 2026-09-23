@@ -23,8 +23,8 @@ button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .6; }
 
-.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(360px, .9fr) minmax(420px, 1.1fr); background: var(--paper); }
-.auth-brand-panel { position: relative; display: flex; flex-direction: column; min-height: 100vh; padding: 28px clamp(28px, 5vw, 76px) 30px; color: #eaf5f1; background: radial-gradient(circle at 15% 15%, rgba(47, 151, 135, .32), transparent 34%), linear-gradient(145deg, #0b5f57 0%, #083f3b 58%, #073532 100%); overflow: hidden; }
+.auth-page { height: 100dvh; min-height: 0; display: grid; grid-template-columns: minmax(360px, .9fr) minmax(420px, 1.1fr); overflow: hidden; background: var(--paper); }
+.auth-brand-panel { position: relative; display: flex; flex-direction: column; min-height: 0; padding: 28px clamp(28px, 5vw, 76px) 30px; color: #eaf5f1; background: radial-gradient(circle at 15% 15%, rgba(47, 151, 135, .32), transparent 34%), linear-gradient(145deg, #0b5f57 0%, #083f3b 58%, #073532 100%); overflow: hidden; }
 .auth-brand-panel::after { content: ''; position: absolute; width: 360px; height: 360px; right: -130px; bottom: -130px; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; box-shadow: 0 0 0 55px rgba(255,255,255,.035), 0 0 0 110px rgba(255,255,255,.025); }
 .auth-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; }
 .auth-brand-mark { display: grid; place-items: center; width: 34px; height: 34px; color: #07574f; background: #d7efe7; border-radius: 10px; }
@@ -42,7 +42,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .auth-benefits span { display: grid; gap: 2px; }
 .auth-benefits strong { color: #f4fbf8; font-weight: 700; }
 .auth-brand-footer { position: relative; z-index: 1; color: rgba(234,245,241,.48); font-size: .7rem; }
-.auth-form-panel { display: grid; place-items: center; min-height: 100vh; padding: 32px clamp(22px, 6vw, 90px); background: var(--paper); }
+.auth-form-panel { display: grid; place-items: center; min-height: 0; padding: 32px clamp(22px, 6vw, 90px); overflow: hidden; background: var(--paper); }
 .auth-form-card { width: min(430px, 100%); }
 .auth-form-heading { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 28px; }
 .auth-form-icon { display: grid; place-items: center; flex: 0 0 auto; width: 42px; height: 42px; color: var(--teal-dark); background: var(--teal-soft); border-radius: 12px; }
@@ -73,18 +73,26 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 
 @media (max-width: 900px) {
   .auth-page { grid-template-columns: 1fr; }
-  .auth-brand-panel { min-height: 300px; padding: 24px clamp(22px, 6vw, 50px); }
+  .auth-brand-panel { min-height: 0; height: 180px; padding: 24px clamp(22px, 6vw, 50px); }
   .auth-brand-content { max-width: 650px; margin: 42px auto; padding: 0; }
   .auth-brand-content h1 { max-width: 520px; font-size: clamp(2rem, 8vw, 3.4rem); }
   .auth-intro, .auth-benefits { display: none; }
   .auth-brand-footer { display: none; }
-  .auth-form-panel { min-height: calc(100vh - 300px); padding-top: 42px; padding-bottom: 42px; }
+  .auth-form-panel { min-height: 0; padding-top: 28px; padding-bottom: 28px; }
 }
 
 @media (max-width: 560px) {
-  .auth-brand-panel { min-height: 245px; }
-  .auth-brand-content { margin: 34px auto; }
+  .auth-brand-panel { height: 112px; padding: 16px 20px; }
+  .auth-brand-content { display: none; }
   .auth-hero-icon { width: 45px; height: 45px; margin-bottom: 17px; border-radius: 13px; }
-  .auth-form-panel { min-height: calc(100vh - 245px); padding: 32px 20px; }
-  .auth-form-heading { margin-bottom: 22px; }
+  .auth-form-panel { padding: 16px 20px; }
+  .auth-form-heading { margin-bottom: 12px; }
+  .auth-form-heading h2 { font-size: 1.4rem; }
+  .auth-form-heading p:last-child { font-size: .78rem; }
+  .auth-mode-switch { margin-bottom: 12px; }
+  .auth-form { gap: 10px; }
+  .auth-field { gap: 5px; }
+  .auth-field input { min-height: 42px; }
+  .auth-submit { min-height: 42px; }
+  .auth-fine-print { margin-top: 12px; }
 }

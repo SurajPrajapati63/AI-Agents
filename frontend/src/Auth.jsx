@@ -66,12 +66,11 @@ function AuthPage({ onAuthenticated }) {
           <h1>Turn documents into answers you can trust.</h1>
           <p className="auth-intro">Upload your source material and ask questions with confidence. Sourcewise keeps every answer grounded in the documents you provide.</p>
           <div className="auth-benefits">
-            <div><CheckCircle2 size={17} /><span><strong>Source-grounded answers</strong>Responses stay tied to your uploaded content.</span></div>
-            <div><CheckCircle2 size={17} /><span><strong>Private workspace</strong>Your account keeps your work organized and accessible.</span></div>
-            <div><CheckCircle2 size={17} /><span><strong>Fast document search</strong>Find what matters across PDFs and text files.</span></div>
+            <div><CheckCircle2 size={17} /><span><strong>Source-grounded answers</strong></span></div>
+            <div><CheckCircle2 size={17} /><span><strong>Private workspace</strong></span></div>
+            <div><CheckCircle2 size={17} /><span><strong>Fast document search</strong></span></div>
           </div>
         </div>
-        <div className="auth-brand-footer">Built for focused research and everyday document questions</div>
       </section>
 
       <section className="auth-form-panel">
