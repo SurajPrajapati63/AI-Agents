@@ -262,17 +262,27 @@ def send_conversation_message(
             )
         history = [{"role": item["role"], "content": item["content"]} for item in messages[-50:]]
         if category not in {"GENERAL/META", "CALCULATION"}:
-            if not retrieved:
-                answer = "I couldn't find that information in the uploaded documents."
-            else:
+            memories = _load_memories(database, user["id"])
+            if retrieved:
                 answer = generate_answer(
                     question,
                     [item["text"] for item in retrieved],
                     DEFAULT_LLM_MODEL,
                     history,
-                    _load_memories(database, user["id"]),
+                    memories,
                     category,
                 )
+            elif history or memories:
+                answer = generate_answer(
+                    question,
+                    [],
+                    DEFAULT_LLM_MODEL,
+                    history,
+                    memories,
+                    "CONVERSATION",
+                )
+            else:
+                answer = "I couldn't find that information in the uploaded documents."
         database.messages.insert_one({
             "user_id": user["id"], "session_id": session_id, "role": "assistant",
             "content": answer, "timestamp": datetime.now(timezone.utc), "message_id": f"msg_{uuid4().hex}",
@@ -374,6 +384,18 @@ def ask_question(
         else get_store().retrieve(question, user["id"])
     )
     if not retrieved:
+        if request.chat_history:
+            try:
+                answer = generate_answer(
+                    question,
+                    [],
+                    DEFAULT_LLM_MODEL,
+                    request.chat_history,
+                    operation="CONVERSATION",
+                )
+            except Exception as error:
+                raise HTTPException(status_code=502, detail=f"Answer generation failed: {error}") from error
+            return {"success": True, "question": question, "answer": answer, "sources": []}
         return {
             "success": True,
             "question": question,
