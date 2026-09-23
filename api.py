@@ -27,8 +27,6 @@ from auth import (
 
 from main import (
     DEFAULT_LLM_MODEL,
-    GENERAL_RESPONSE,
-    NOT_FOUND,
     calculate_explicit_math,
     classify_question,
     generate_answer,
@@ -131,9 +129,6 @@ def _conversation_messages(database, user: dict, session_id: str) -> list[dict]:
     return list(database.messages.find(_conversation_filter(user, session_id), {"_id": 0}).sort("timestamp", 1))
 
 
-CALCULATION_FALLBACK = "I couldn't calculate that because the required values or rule were not provided."
-
-
 def _build_sources(retrieved: list[dict]) -> list[dict]:
     """Deduplicate retrieved chunks into citation payloads."""
     sources: list[dict] = []
@@ -166,11 +161,20 @@ def _answer_question(
     """
     category = classify_question(question)
 
-    # General / Calculation -> Direct Answer (no retrieval, no LLM)
+    # General -> GPT-style direct answer (no retrieval)
     if category == "GENERAL/META":
-        return GENERAL_RESPONSE, []
+        return generate_answer(
+            question, [], DEFAULT_LLM_MODEL, history, memories, "GENERAL"
+        ), []
+
+    # Calculation -> exact math when the pattern is recognized, otherwise the LLM
     if category == "CALCULATION":
-        return calculate_explicit_math(question) or CALCULATION_FALLBACK, []
+        direct = calculate_explicit_math(question)
+        if direct:
+            return direct, []
+        return generate_answer(
+            question, [], DEFAULT_LLM_MODEL, history, memories, "CALCULATION"
+        ), []
 
     # Count / Aggregation / Compare -> Retrieve all -> calculate in the LLM
     if category in {"COUNT", "AGGREGATION", "COMPARISON"}:
@@ -190,17 +194,11 @@ def _answer_question(
         )
         return answer, retrieved
 
-    # Nothing retrieved -> answer from this conversation when possible
-    if history or memories:
-        return generate_answer(
-            question,
-            [],
-            DEFAULT_LLM_MODEL,
-            history,
-            memories,
-            "CONVERSATION",
-        ), []
-    return NOT_FOUND, []
+    # No document context -> GPT-style answer: this conversation first, then own knowledge
+    mode = "CONVERSATION" if (history or memories) else "GENERAL"
+    return generate_answer(
+        question, [], DEFAULT_LLM_MODEL, history, memories, mode
+    ), []
 
 
 @app.get("/health")
