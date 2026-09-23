@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import AuthPage from './Auth.jsx'
 import {
-  clearAuthToken, createConversation, deleteConversation as deleteConversationRequest,
+  askQuestion, clearAuthToken, createConversation, deleteConversation as deleteConversationRequest,
   deleteDocument, getConversationMessages, getCurrentUser, getDocuments, getAuthToken,
   listConversations, logout as logoutRequest, sendConversationMessage, uploadDocuments,
 } from './services/api'
@@ -44,7 +44,10 @@ function App() {
 
   async function loadConversations() {
     const payload = await listConversations()
-    const loaded = await Promise.all((payload.conversations || []).map(async (summary) => {
+    const sessionSummaries = (payload.conversations || []).filter((summary) => (
+      typeof summary?.session_id === 'string' && summary.session_id.length > 0
+    ))
+    const loaded = await Promise.all(sessionSummaries.map(async (summary) => {
       let messages = []
       try {
         const history = await getConversationMessages(summary.session_id)
@@ -62,9 +65,7 @@ function App() {
         messages,
       }
     }))
-    const nextConversations = loaded.length
-      ? loaded
-      : [{ ...newConversation(), id: (await createConversation()).session_id }]
+    const nextConversations = loaded.length ? loaded : [newConversation()]
     setConversations(nextConversations)
     setActiveId(nextConversations[0].id)
   }
@@ -164,7 +165,15 @@ function App() {
       setQuestion('')
       setMobileOpen(false)
     } catch (error) {
-      showToast({ type: 'error', text: error.message || 'Unable to create a new chat.' })
+      if (error?.status === 404 || error?.status === 405) {
+        const conversation = newConversation()
+        setConversations((current) => [conversation, ...current])
+        setActiveId(conversation.id)
+        setQuestion('')
+        setMobileOpen(false)
+      } else {
+        showToast({ type: 'error', text: error.message || 'Unable to create a new chat.' })
+      }
     }
   }
 
@@ -175,7 +184,15 @@ function App() {
     try {
       if (isServerConversation(conversationId)) await deleteConversationRequest(conversationId)
       const remaining = conversations.filter((item) => item.id !== conversationId)
-      const replacement = remaining.length ? null : await createConversation()
+      let replacement = null
+      if (!remaining.length) {
+        try {
+          replacement = await createConversation()
+        } catch (error) {
+          if (error?.status !== 404 && error?.status !== 405) throw error
+          replacement = { session_id: crypto.randomUUID(), title: 'New conversation' }
+        }
+      }
       const nextConversations = remaining.length
         ? remaining
         : [{ ...newConversation(), id: replacement.session_id, title: replacement.title }]
@@ -247,12 +264,17 @@ function App() {
     setStatus(null)
 
     let conversationId = selectedId
+    let legacyFallback = false
     try {
       conversationId = await ensureServerConversation(conversationId, activeConversation.title)
     } catch (error) {
-      setIsSending(false)
-      showToast({ type: 'error', text: error.message || 'Unable to start this conversation.' })
-      return
+      if (error?.status === 404 || error?.status === 405) {
+        legacyFallback = true
+      } else {
+        setIsSending(false)
+        showToast({ type: 'error', text: error.message || 'Unable to start this conversation.' })
+        return
+      }
     }
 
     const userMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
@@ -264,7 +286,9 @@ function App() {
     setQuestion('')
 
     try {
-      const payload = await sendConversationMessage(conversationId, trimmed)
+      const payload = legacyFallback
+        ? await askQuestion(trimmed, activeConversation.messages.map(({ role, content }) => ({ role, content })))
+        : await sendConversationMessage(conversationId, trimmed)
       updateConversation(conversationId, (conversation) => ({
         ...conversation,
         messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }],
