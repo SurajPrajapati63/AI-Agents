@@ -42,6 +42,16 @@ revocable login sessions. `MONGODB_DATABASE` selects the database name. Keep
 MongoDB credentials in the backend environment and never expose them to the
 frontend.
 
+For MongoDB Atlas, create a database user, copy the connection string for the
+actual cluster host, and add the Render service to Atlas Network Access. For a
+Render service without fixed outbound IPs, use `0.0.0.0/0` in Atlas Network
+Access and rely on a strong database password. Replace any `<cluster-host>` or
+other placeholder in the URI; `cluster0.xxxxx.mongodb.net` is not a valid host.
+If the password contains characters such as `@`, `:`, `/`, or `#`, URL-encode
+them before placing the value in `MONGODB_URI`. Set this variable in Render's
+Environment settings and redeploy; Render does not read the repository's local
+`.env` file.
+
 `GROQ_API_KEY` is used for answer generation. Document retrieval uses local
 feature-hash embeddings, so no second embedding API key is required. Do not
 expose `GROQ_API_KEY` to the browser or prefix it with `VITE_`.

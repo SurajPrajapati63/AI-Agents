@@ -22,8 +22,6 @@ def _resolve_mongodb_uri() -> str:
     """Read the connection string from MONGODB_URI or the MONGO_URI alias."""
     return (
         os.environ.get("MONGODB_URI")
-        or os.environ.get("MONGO_URI")
-        or "mongodb://localhost:27017"
     )
 
 
