@@ -32,7 +32,7 @@ GROQ_API_KEY=your_groq_key
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DATABASE=sourcewise
 VECTOR_STORE_DIRECTORY=/data/vector_store
-CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app,http://127.0.0.1:5173,http://localhost:5173
+CORS_ORIGINS=https://ai-agents-inky-two.vercel.app,http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173
 CORS_ORIGIN_REGEX=https://ai-agents-[a-z0-9-]+-suraj-prajapatis-projects-b7c1f72a\.vercel\.app
 MAX_FILE_SIZE=10485760
 ```
