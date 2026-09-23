@@ -27,14 +27,13 @@ from auth import (
 
 from main import (
     DEFAULT_LLM_MODEL,
-    calculate_explicit_math,
-    classify_question,
     generate_answer,
 )
 from rag_store import VectorDocumentStore
 
 
 MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
+MAX_CONTEXT_CHUNKS = int(os.environ.get("MAX_CONTEXT_CHUNKS", "40"))
 ALLOWED_TYPES = {".pdf", ".txt"}
 
 app = FastAPI(title="Document Q&A API", version="1.0.0")
@@ -144,11 +143,27 @@ def _build_sources(retrieved: list[dict]) -> list[dict]:
             {
                 "document_id": metadata["document_id"],
                 "filename": metadata["filename"],
-                "page": metadata.get("page"),
+                "page": _page_number(metadata),
                 "chunk_id": metadata["chunk_id"],
             }
         )
     return sources
+
+
+def _page_number(metadata: dict) -> int | None:
+    """Return the 1-based page number, or None for text files that have no pages."""
+    page = metadata.get("page")
+    return page if isinstance(page, int) and page > 0 else None
+
+
+def _label_chunk(item: dict) -> str:
+    """Prefix a chunk with its filename and page so the answer can cite it."""
+    metadata = item["metadata"]
+    label = metadata["filename"]
+    page = _page_number(metadata)
+    if page:
+        label = f"{label}, page {page}"
+    return f"[{label}]\n{item['text']}"
 
 
 def _answer_question(
@@ -157,50 +172,16 @@ def _answer_question(
     history: list[dict],
     memories: list[str],
 ) -> tuple[str, list[dict]]:
-    """Route one question through the classifier and return (answer, retrieved chunks).
-
-    Question -> Classifier -> General | Document | Count | Compare
-    """
-    category = classify_question(question)
-
-    # General -> GPT-style direct answer (no retrieval)
-    if category == "GENERAL/META":
-        return generate_answer(
-            question, [], DEFAULT_LLM_MODEL, history, memories, "GENERAL"
-        ), []
-
-    # Calculation -> exact math when the pattern is recognized, otherwise the LLM
-    if category == "CALCULATION":
-        direct = calculate_explicit_math(question)
-        if direct:
-            return direct, []
-        return generate_answer(
-            question, [], DEFAULT_LLM_MODEL, history, memories, "CALCULATION"
-        ), []
-
-    # Count / Aggregation / Compare -> Retrieve all -> calculate in the LLM
-    if category in {"COUNT", "AGGREGATION", "COMPARISON"}:
-        retrieved = get_store().retrieve_all(question, user["id"])
-    else:
-        # Document QA -> RAG search (top-k) -> LLM
-        retrieved = get_store().retrieve(question, user["id"])
-
-    if retrieved:
-        answer = generate_answer(
-            question,
-            [item["text"] for item in retrieved],
-            DEFAULT_LLM_MODEL,
-            history,
-            memories,
-            category,
-        )
-        return answer, retrieved
-
-    # No document context -> GPT-style answer: this conversation first, then own knowledge
-    mode = "CONVERSATION" if (history or memories) else "GENERAL"
-    return generate_answer(
-        question, [], DEFAULT_LLM_MODEL, history, memories, mode
-    ), []
+    """Answer one question the simple GPT way: document context when available, always an answer."""
+    retrieved = get_store().retrieve_all(question, user["id"])[:MAX_CONTEXT_CHUNKS]
+    answer = generate_answer(
+        question,
+        [_label_chunk(item) for item in retrieved],
+        DEFAULT_LLM_MODEL,
+        history,
+        memories,
+    )
+    return answer, retrieved
 
 
 @app.get("/health")
@@ -397,7 +378,7 @@ def ask_question(
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     try:
-        answer, retrieved = _answer_question(question, user, request.chat_history, [])
+        answer, retrieved = _answer_question(question, user, request.chat_history, _load_memories(get_database(), user["id"]))
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"Answer generation failed: {error}") from error
 

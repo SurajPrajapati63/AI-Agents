@@ -340,13 +340,13 @@ function App() {
         </section>
 
         <section className="sidebar-section documents-section">
-          <div className="section-label"><FolderOpen size={14} /> Knowledge base</div>
+          <div className="section-label"><FolderOpen size={14} /> My documents</div>
           <div className="document-list">
             {documents.map((document) => <div className="document-row" key={document.id}><FileText size={16} /><div><strong>{document.filename}</strong><span>{document.chunks} chunks</span></div><button className="icon-button danger" onClick={() => handleDelete(document)} aria-label={`Delete ${document.filename}`}><Trash2 size={15} /></button></div>)}
             {!documents.length && <span className="empty-note">No documents stored yet.</span>}
           </div>
         </section>
-        <div className="sidebar-footer"><ShieldCheck size={14} /> Answers stay grounded in your documents</div>
+        <div className="sidebar-footer"><ShieldCheck size={14} /> Chats are saved for future context</div>
       </aside>
 
       {mobileOpen && <button className="sidebar-scrim" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}
@@ -364,8 +364,8 @@ function App() {
         <section ref={chatScrollRef} className="chat-scroll" aria-live="polite">
           <div className="chat-column">
             {!activeConversation.messages.length ? <div className="welcome-panel">
-              <div className="welcome-icon"><Bot size={24} /></div><p className="eyebrow">Document Q&A</p><h2>Ask better questions of your files.</h2><p>Upload a policy, resume, or project note, then ask for a clear answer grounded in the text.</p>
-              <div className="prompt-suggestions">{['Summarize the key points', 'What projects are mentioned?', 'What should I know first?'].map((prompt) => <button key={prompt} onClick={() => setQuestion(prompt)}>{prompt}<ChevronDown size={14} /></button>)}</div>
+              <div className="welcome-icon"><Bot size={24} /></div><p className="eyebrow">Chat with your files</p><h2>Ask anything.</h2><p>General questions get a direct answer, questions about your uploaded files are answered from the file, and every chat is saved for future context.</p>
+              <div className="prompt-suggestions">{['Summarize the key points', 'What projects are mentioned?', 'Explain this in simple words'].map((prompt) => <button key={prompt} onClick={() => setQuestion(prompt)}>{prompt}<ChevronDown size={14} /></button>)}</div>
             </div> : activeConversation.messages.map((message) => (
               <article className={`message-row ${message.role}`} key={message.id}>
                 <div className={`avatar ${message.role}`}>{message.role === 'assistant' ? <Bot size={16} /> : 'You'} </div>
@@ -384,7 +384,7 @@ function App() {
           <form className="composer" onSubmit={sendQuestion}>
             <button type="button" className="composer-action" onClick={() => composerFileInputRef.current?.click()} aria-label="Attach documents"><Paperclip size={18} /></button>
             <input ref={composerFileInputRef} className="hidden-file-input" type="file" accept=".pdf,.txt" multiple onChange={selectFiles} />
-            <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Ask anything about your documents..." rows="1" disabled={isSending} />
+            <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Ask anything..." rows="1" disabled={isSending} />
             <button className="send-button" type="submit" disabled={!question.trim() || isSending} aria-label="Send question"><Send size={17} /></button>
           </form>
           <p className="composer-hint">Enter to send · Shift + Enter for a new line</p>
