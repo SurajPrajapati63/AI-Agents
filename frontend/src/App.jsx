@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Bot, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, Menu,
-  MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UploadCloud, X,
+  Bot, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
+  MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UploadCloud, UserRound, X,
 } from 'lucide-react'
-import { askQuestion, deleteDocument, getDocuments, uploadDocuments } from './services/api'
+import AuthPage from './Auth.jsx'
+import {
+  askQuestion, clearAuthToken, deleteDocument, getDocuments, getCurrentUser, getAuthToken,
+  logout as logoutRequest, uploadDocuments,
+} from './services/api'
 import './App.css'
 
 const CHAT_STORAGE_KEY = 'document_qna_conversations'
@@ -37,6 +41,8 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [status, setStatus] = useState(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(() => Boolean(getAuthToken()))
   const composerFileInputRef = useRef(null)
   const chatScrollRef = useRef(null)
   const messagesEndRef = useRef(null)
@@ -49,10 +55,41 @@ function App() {
   }, [conversations])
 
   useEffect(() => {
-    getDocuments()
+    let active = true
+    const token = getAuthToken()
+    if (!token) {
+      return undefined
+    }
+
+    getCurrentUser()
+      .then((payload) => {
+        if (active) setUser(payload.user)
+      })
+      .catch(() => {
+        clearAuthToken()
+      })
+      .finally(() => {
+        if (active) setAuthLoading(false)
+      })
+
+    function handleAuthExpired() {
+      clearAuthToken()
+      setUser(null)
+      setAuthLoading(false)
+    }
+    window.addEventListener('sourcewise-auth-expired', handleAuthExpired)
+    return () => {
+      active = false
+      window.removeEventListener('sourcewise-auth-expired', handleAuthExpired)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!user) return undefined
+    return getDocuments()
       .then((payload) => setDocuments(payload.documents || []))
       .catch(() => setStatus({ type: 'error', text: 'Backend unavailable. Start the API to manage documents.' }))
-  }, [])
+  }, [user])
 
   useEffect(() => {
     chatScrollRef.current?.scrollTo({
@@ -83,6 +120,28 @@ function App() {
     const nextConversations = remaining.length ? remaining : [newConversation()]
     setConversations(nextConversations)
     if (conversationId === selectedId) setActiveId(nextConversations[0].id)
+  }
+
+  function handleAuthenticated(authUser) {
+    setUser(authUser)
+    setAuthLoading(false)
+  }
+
+  async function handleLogout() {
+    try {
+      await logoutRequest()
+    } finally {
+      clearAuthToken()
+      setUser(null)
+      setAuthLoading(false)
+      setConversations([newConversation()])
+      setActiveId(null)
+      setDocuments([])
+      setSelectedFiles([])
+      setQuestion('')
+      setStatus(null)
+      setMobileOpen(false)
+    }
   }
 
   function selectFiles(event) {
@@ -163,6 +222,11 @@ function App() {
     }
   }
 
+  if (authLoading) {
+    return <div className="auth-loading-screen"><div className="auth-loading-mark"><Sparkles size={22} /></div><LoaderCircle className="spin" size={20} /><p>Opening your workspace...</p></div>
+  }
+  if (!user) return <AuthPage onAuthenticated={handleAuthenticated} />
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
@@ -199,11 +263,15 @@ function App() {
 
       {mobileOpen && <button className="sidebar-scrim" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}
       <main className="chat-workspace">
-        {documents.length > 0 && <header className="topbar">
+        <header className="topbar">
           <button className="icon-button menu-button" onClick={() => setMobileOpen(true)} aria-label="Open sidebar"><Menu size={20} /></button>
           <div><span className="eyebrow">Private workspace</span><h1>{activeConversation.title}</h1></div>
           <div className="connection-status"><span /> Vector store connected</div>
-        </header>}
+          <div className="user-controls">
+            <div className="user-identity"><UserRound size={16} /><span>{user.email}</span></div>
+            <button type="button" className="logout-button" onClick={handleLogout} aria-label="Sign out"><LogOut size={15} /><span>Sign out</span></button>
+          </div>
+        </header>
 
         <section ref={chatScrollRef} className="chat-scroll" aria-live="polite">
           <div className="chat-column">

@@ -3,12 +3,24 @@ from __future__ import annotations
 import os
 from typing import Annotated
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+from pymongo.errors import PyMongoError
 
 load_dotenv()
+
+from auth import (
+    CredentialsRequest,
+    authenticate_user,
+    create_user,
+    database_error,
+    get_bearer_token,
+    get_current_user,
+    get_database,
+    revoke_session,
+)
 
 from main import DEFAULT_LLM_MODEL, generate_answer
 from rag_store import VectorDocumentStore
@@ -28,6 +40,8 @@ allowed_origins.update(
     {
         "http://localhost:5173",
         "http://localhost:8501",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8501",
         "http://ai-agent-rag.vercel.app",
         "https://ai-agent-rag.vercel.app",
         "https://ai-agents-inky-two.vercel.app",
@@ -61,8 +75,41 @@ def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+@app.post("/auth/signup")
+def signup(request: CredentialsRequest) -> dict:
+    try:
+        return create_user(get_database(), request)
+    except PyMongoError as error:
+        raise database_error(error) from error
+
+
+@app.post("/auth/login")
+def login(request: CredentialsRequest) -> dict:
+    try:
+        return authenticate_user(get_database(), request)
+    except PyMongoError as error:
+        raise database_error(error) from error
+
+
+@app.get("/auth/me")
+def current_user(user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    return {"success": True, "user": user}
+
+
+@app.post("/auth/logout")
+def logout(token: Annotated[str, Depends(get_bearer_token)]) -> dict[str, bool]:
+    try:
+        revoke_session(token)
+    except PyMongoError as error:
+        raise database_error(error) from error
+    return {"success": True}
+
+
 @app.post("/upload")
-async def upload_documents(files: Annotated[list[UploadFile], File(...)]) -> dict:
+async def upload_documents(
+    files: Annotated[list[UploadFile], File(...)],
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict:
     if not files:
         raise HTTPException(status_code=400, detail="At least one PDF or TXT file is required.")
 
@@ -90,7 +137,10 @@ async def upload_documents(files: Annotated[list[UploadFile], File(...)]) -> dic
 
 
 @app.post("/ask")
-def ask_question(request: AskRequest) -> dict:
+def ask_question(
+    request: AskRequest,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict:
     question = request.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
@@ -135,12 +185,15 @@ def ask_question(request: AskRequest) -> dict:
 
 
 @app.get("/documents")
-def list_documents() -> dict:
+def list_documents(user: Annotated[dict, Depends(get_current_user)]) -> dict:
     return {"success": True, "documents": get_store().documents()}
 
 
 @app.delete("/documents/{document_id}")
-def delete_document(document_id: str) -> dict[str, object]:
+def delete_document(
+    document_id: str,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict[str, object]:
     if not get_store().delete_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"success": True, "message": "Document deleted successfully"}

@@ -29,10 +29,17 @@ Set these backend environment variables:
 
 ```text
 GROQ_API_KEY=your_groq_key
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DATABASE=sourcewise
 VECTOR_STORE_DIRECTORY=/data/vector_store
-CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app
+CORS_ORIGINS=http://ai-agent-rag.vercel.app,https://ai-agent-rag.vercel.app,https://ai-agents-inky-two.vercel.app,http://127.0.0.1:5173,http://localhost:5173
 MAX_FILE_SIZE=10485760
 ```
+
+`MONGODB_URI` points to the MongoDB deployment used for user accounts and
+revocable login sessions. `MONGODB_DATABASE` selects the database name. Keep
+MongoDB credentials in the backend environment and never expose them to the
+frontend.
 
 `GROQ_API_KEY` is used for answer generation. Document retrieval uses local
 feature-hash embeddings, so no second embedding API key is required. Do not
