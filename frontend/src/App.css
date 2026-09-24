@@ -117,7 +117,6 @@ button:disabled {
   background: #cde9e0;
 }
 .sidebar-section {
-  display: grid;
   min-width: 0;
   gap: 9px;
 }
@@ -130,10 +129,10 @@ button:disabled {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  margin: 10px;
 }
 .conversation-list,
 .document-list {
-  display: grid;
   min-width: 0;
 }
 .conversation-list {
@@ -864,15 +863,35 @@ button:disabled {
   overflow: hidden;
 }
 .conversations-section {
-  flex: 1 1 auto;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 .conversation-list {
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: #b6cbc5 transparent;
+}
+.documents-section {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  max-height: 32%;
+  min-height: 0;
+  overflow: hidden;
+}
+.documents-section .document-list {
+  min-height: 0;
+  overflow-y: auto;
 }
 .conversation-list::-webkit-scrollbar {
   width: 6px;
