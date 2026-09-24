@@ -100,6 +100,13 @@ class VectorDocumentStore:
             self.records = self._load_records()
         if self.embeddings is None:
             self.embeddings = self._load_embeddings()
+        # Keep saved chunk records and their vectors in sync. Older or
+        # partially persisted stores can contain records with missing or
+        # differently sized vectors, which otherwise crashes document Q&A at
+        # the NumPy matrix multiplication step.
+        if self.embeddings.shape != (len(self.records), LOCAL_EMBEDDING_DIMENSIONS):
+            self.embeddings = self._embed([record["text"] for record in self.records])
+            self._save()
 
     def _embed(self, texts: list[str]) -> np.ndarray:
         result = np.zeros((len(texts), LOCAL_EMBEDDING_DIMENSIONS), dtype=np.float32)
@@ -265,6 +272,11 @@ class VectorDocumentStore:
         if not owned_indices:
             return []
         query_vector = self._embed([question])[0]
+        if self.embeddings.shape[1] != query_vector.shape[0]:
+            raise ValueError(
+                "Stored document vectors are incompatible. The vector store was rebuilt; "
+                "please retry your question."
+            )
         owned_embeddings = self.embeddings[np.asarray(owned_indices)]
         semantic_scores = owned_embeddings @ query_vector
         question_terms = set(re.findall(r"[a-z0-9]+", question.lower()))
