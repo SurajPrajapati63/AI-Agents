@@ -43,7 +43,10 @@ from memory_store import (
 
 
 MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
-MAX_CONTEXT_CHUNKS = int(os.environ.get("MAX_CONTEXT_CHUNKS", "40"))
+MAX_CONTEXT_CHUNKS = min(5, max(1, int(os.environ.get("MAX_CONTEXT_CHUNKS", "5"))))
+MAX_HISTORY_MESSAGES = min(8, max(1, int(os.environ.get("MAX_HISTORY_MESSAGES", "8"))))
+MAX_HISTORY_MESSAGE_CHARS = 500
+MAX_DOCUMENT_CHUNK_CHARS = 1600
 ALLOWED_TYPES = {".pdf", ".txt"}
 
 app = FastAPI(title="Document Q&A API", version="1.0.0")
@@ -127,24 +130,62 @@ def _conversation_messages(database, user: dict, session_id: str) -> list[dict]:
     return list(database.messages.find(_conversation_filter(user, session_id), {"_id": 0}).sort("timestamp", 1))
 
 
-def _chat_history(database, user: dict, session_id: str, limit: int = 50) -> list[dict]:
-    """Current chat plus earlier chats, so a new chat still knows previous data."""
-    current = list(
-        database.messages.find(_conversation_filter(user, session_id), {"_id": 0})
-        .sort("timestamp", -1)
-        .limit(limit)
-    )
-    earlier = list(
-        database.messages.find(
-            {"user_id": user["id"], "session_id": {"$ne": session_id}},
-            {"_id": 0, "role": 1, "content": 1},
+def _chat_history(
+    database,
+    user: dict,
+    session_id: str,
+    question: str,
+    limit: int = MAX_HISTORY_MESSAGES,
+) -> list[dict]:
+    """Retrieve only the most relevant messages across this user's chat history."""
+    query_terms = set(re.findall(r"[a-z0-9]+", question.lower()))
+    cursor = database.messages.find(
+        {"user_id": user["id"]},
+        {"_id": 0, "role": 1, "content": 1, "timestamp": 1, "session_id": 1},
+    ).sort("timestamp", -1)
+
+    recent: list[dict] = []
+    relevant: list[tuple[int, dict]] = []
+    for item in cursor:
+        content = str(item.get("content") or "")
+        if not content or item.get("role") not in {"user", "assistant"}:
+            continue
+        if len(recent) < min(4, limit):
+            recent.append(item)
+        terms = set(re.findall(r"[a-z0-9]+", content.lower()))
+        overlap = len(query_terms & terms)
+        if overlap:
+            relevant.append((overlap, item))
+
+    selected: dict[tuple[str, str], dict] = {}
+    for item in recent:
+        key = (
+            str(item.get("session_id", "")),
+            str(item.get("timestamp", "")),
+            item["role"],
+            str(item.get("content", "")),
         )
-        .sort("timestamp", -1)
-        .limit(limit)
-    )
-    history = [{"role": item["role"], "content": item["content"]} for item in reversed(earlier)]
-    history += [{"role": item["role"], "content": item["content"]} for item in reversed(current)]
-    return history[-limit:]
+        selected[key] = item
+    for _, item in sorted(relevant, key=lambda pair: pair[0], reverse=True):
+        key = (
+            str(item.get("session_id", "")),
+            str(item.get("timestamp", "")),
+            item["role"],
+            str(item.get("content", "")),
+        )
+        selected[key] = item
+        if len(selected) >= limit:
+            break
+
+    def timestamp_order(item: dict) -> str:
+        value = item.get("timestamp")
+        return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
+
+    chosen = sorted(selected.values(), key=timestamp_order)[-limit:]
+    return [
+        {"role": item["role"], "content": str(item["content"])[:MAX_HISTORY_MESSAGE_CHARS]}
+        for item in chosen
+    ]
 
 
 def _build_sources(retrieved: list[dict]) -> list[dict]:
@@ -190,13 +231,19 @@ def _answer_question(
     memories: list[str],
 ) -> tuple[str, list[dict]]:
     """Answer one question the simple GPT way: document context when available, always an answer."""
-    retrieved = get_store().retrieve_all(question, user["id"])[:MAX_CONTEXT_CHUNKS]
+    # Retrieve by relevance and send only a small number of bounded chunks.
+    # Sending every chunk from every uploaded document can exceed the model's
+    # request limit even when the actual answer only needs one passage.
+    retrieved = get_store().retrieve(question, user["id"], top_k=MAX_CONTEXT_CHUNKS)
+    labeled_chunks = [_label_chunk(item)[:MAX_DOCUMENT_CHUNK_CHARS] for item in retrieved]
+    bounded_history = history[-MAX_HISTORY_MESSAGES:]
+    bounded_memories = [memory[:250] for memory in memories[:6]]
     answer = generate_answer(
         question,
-        [_label_chunk(item) for item in retrieved],
+        labeled_chunks,
         DEFAULT_LLM_MODEL,
-        history,
-        memories,
+        bounded_history,
+        bounded_memories,
     )
     return answer, retrieved
 
@@ -321,7 +368,7 @@ def send_conversation_message(
         database = get_database()
         messages = _conversation_messages(database, user, session_id)
         now = datetime.now(timezone.utc)
-        history = _chat_history(database, user, session_id)
+        history = _chat_history(database, user, session_id, question)
         history.append({"role": "user", "content": question})
         save_memories_from_message(database, user["id"], question)
         answer, retrieved = _answer_question(
