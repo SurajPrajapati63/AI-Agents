@@ -361,7 +361,7 @@ def send_conversation_message(
         logger.exception("Conversation message failed for session %s", session_id)
         raise HTTPException(
             status_code=502,
-            detail=f"Message processing failed ({type(error).__name__}). Check the backend logs.",
+            detail=f"{type(error).__name__}: {error}",
         ) from error
 
 
