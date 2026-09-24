@@ -32,6 +32,7 @@ function App() {
   const chatScrollRef = useRef(null)
   const messagesEndRef = useRef(null)
   const toastTimerRef = useRef(null)
+  const statusTimerRef = useRef(null)
 
   const selectedId = activeId || conversations[0].id
   const activeConversation = conversations.find((conversation) => conversation.id === selectedId) || conversations[0]
@@ -113,7 +114,10 @@ function App() {
     }
   }, [])
 
-  useEffect(() => () => window.clearTimeout(toastTimerRef.current), [])
+  useEffect(() => () => {
+    window.clearTimeout(toastTimerRef.current)
+    window.clearTimeout(statusTimerRef.current)
+  }, [])
 
   useEffect(() => {
     if (!user) return undefined
@@ -253,7 +257,12 @@ function App() {
     try {
       await deleteDocument(document.id)
       setDocuments((current) => current.filter((item) => item.id !== document.id))
-      setStatus({ type: 'success', text: `${document.filename} deleted.` })
+      const message = `${document.filename} deleted.`
+      setStatus({ type: 'success', text: message })
+      window.clearTimeout(statusTimerRef.current)
+      statusTimerRef.current = window.setTimeout(() => {
+        setStatus((current) => current?.type === 'success' && current.text === message ? null : current)
+      }, 3000)
     } catch (error) {
       setStatus({ type: 'error', text: error.message })
     }
