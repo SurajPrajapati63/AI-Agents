@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  Bot, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
+  Bot, Brain, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
   MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
 } from 'lucide-react'
 import AuthPage from './Auth.jsx'
 import {
   askQuestion, clearAuthToken, createConversation, deleteConversation as deleteConversationRequest,
-  deleteDocument, getConversationMessages, getCurrentUser, getDocuments, getAuthToken,
-  listConversations, logout as logoutRequest, sendConversationMessage, uploadDocuments,
+  deleteDocument, deleteMemory, getConversationMessages, getCurrentUser, getDocuments, getAuthToken,
+  getMemories, listConversations, logout as logoutRequest, sendConversationMessage, uploadDocuments,
 } from './services/api'
 import './App.css'
 
@@ -48,24 +48,28 @@ function App() {
       typeof summary?.session_id === 'string' && summary.session_id.length > 0
     ))
     const loaded = await Promise.all(sessionSummaries.map(async (summary) => {
-      let messages = []
       try {
         const history = await getConversationMessages(summary.session_id)
-        messages = (history.messages || []).map((message) => ({
+        const messages = (history.messages || []).map((message) => ({
           id: message.message_id || crypto.randomUUID(),
           role: message.role,
           content: message.content,
         }))
-      } catch {
-        messages = []
-      }
-      return {
-        id: summary.session_id,
-        title: summary.title || 'New conversation',
-        messages,
+        return {
+          id: summary.session_id,
+          title: summary.title || 'New conversation',
+          messages,
+        }
+      } catch (error) {
+        // A conversation can be deleted in another tab/device after the
+        // summary list loads. Drop the stale entry instead of retrying it on
+        // every page load.
+        if (error?.status === 404) return null
+        throw error
       }
     }))
-    const nextConversations = loaded.length ? loaded : [newConversation()]
+    const validConversations = loaded.filter(Boolean)
+    const nextConversations = validConversations.length ? validConversations : [newConversation()]
     setConversations(nextConversations)
     setActiveId(nextConversations[0].id)
   }
@@ -286,9 +290,28 @@ function App() {
     setQuestion('')
 
     try {
-      const payload = legacyFallback
-        ? await askQuestion(trimmed, activeConversation.messages.map(({ role, content }) => ({ role, content })))
-        : await sendConversationMessage(conversationId, trimmed)
+      let payload
+      if (legacyFallback) {
+        payload = await askQuestion(trimmed, activeConversation.messages.map(({ role, content }) => ({ role, content })))
+      } else {
+        try {
+          payload = await sendConversationMessage(conversationId, trimmed)
+        } catch (error) {
+          // Repair stale conversation IDs transparently, then send the
+          // message once against the newly created server conversation.
+          if (error?.status !== 404) throw error
+          const created = await createConversation(activeConversation.title)
+          const replacementId = created.session_id
+          setConversations((current) => current.map((conversation) => (
+            conversation.id === conversationId
+              ? { ...conversation, id: replacementId, title: created.title || conversation.title }
+              : conversation
+          )))
+          setActiveId(replacementId)
+          conversationId = replacementId
+          payload = await sendConversationMessage(replacementId, trimmed)
+        }
+      }
       updateConversation(conversationId, (conversation) => ({
         ...conversation,
         messages: [...conversation.messages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }],

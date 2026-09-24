@@ -319,18 +319,21 @@ def send_conversation_message(
         database = get_database()
         messages = _conversation_messages(database, user, session_id)
         now = datetime.now(timezone.utc)
-        database.messages.insert_one({
-            "user_id": user["id"], "session_id": session_id, "role": "user",
-            "content": question, "timestamp": now, "message_id": f"msg_{uuid4().hex}",
-        })
-        save_memories_from_message(database, user["id"], question)
         history = _chat_history(database, user, session_id)
+        history.append({"role": "user", "content": question})
+        save_memories_from_message(database, user["id"], question)
         answer, retrieved = _answer_question(
             question,
             user,
             history,
             _load_memories(database, user["id"]),
         )
+        # Persist the turn only after answer generation succeeds. Otherwise
+        # repeated retries leave orphaned user messages in conversation history.
+        database.messages.insert_one({
+            "user_id": user["id"], "session_id": session_id, "role": "user",
+            "content": question, "timestamp": now, "message_id": f"msg_{uuid4().hex}",
+        })
         database.messages.insert_one({
             "user_id": user["id"], "session_id": session_id, "role": "assistant",
             "content": answer, "timestamp": datetime.now(timezone.utc), "message_id": f"msg_{uuid4().hex}",
@@ -346,6 +349,10 @@ def send_conversation_message(
         raise _groq_rate_limit_response(error) from error
     except PyMongoError as error:
         raise database_error(error) from error
+    except ValueError as error:
+        # Configuration problems (for example a missing GROQ_API_KEY) should
+        # be reported as a service error, not an opaque HTTP 500.
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.put("/conversations")
