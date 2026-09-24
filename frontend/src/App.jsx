@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   Bot, Brain, Check, ChevronDown, FileText, FolderOpen, LoaderCircle, LogOut, Menu,
-  MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
+  MessageCircle, MessageSquarePlus, Paperclip, Send, ShieldCheck, Sparkles, Trash2, UserRound, X,
 } from 'lucide-react'
 import AuthPage from './Auth.jsx'
 import {
@@ -354,7 +354,7 @@ function App() {
             {conversations.filter((conversation) => conversation.messages.length > 0).map((conversation) => (
               <div className={`conversation-row ${conversation.id === selectedId ? 'active' : ''}`} key={conversation.id}>
                 <button type="button" className="conversation-item" onClick={() => { setActiveId(conversation.id); setMobileOpen(false) }}>
-                  <MessageSquarePlus size={15} /><span>{conversation.title}</span>
+                  <MessageCircle size={22} strokeWidth={1.7} /><span>{conversation.title}</span>
                 </button>
                 <button type="button" className="icon-button conversation-delete" onClick={(event) => { event.stopPropagation(); deleteConversation(conversation.id) }} aria-label={`Delete ${conversation.title}`}><Trash2 size={14} /></button>
               </div>
