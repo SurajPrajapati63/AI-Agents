@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Annotated
@@ -79,6 +80,7 @@ app.add_middleware(
 )
 
 store: VectorDocumentStore | None = None
+logger = logging.getLogger(__name__)
 
 
 def get_store() -> VectorDocumentStore:
@@ -353,6 +355,14 @@ def send_conversation_message(
         # Configuration problems (for example a missing GROQ_API_KEY) should
         # be reported as a service error, not an opaque HTTP 500.
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        # Preserve the traceback in Render logs so production 500s have a
+        # concrete cause, while returning a useful response to the client.
+        logger.exception("Conversation message failed for session %s", session_id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Message processing failed ({type(error).__name__}). Check the backend logs.",
+        ) from error
 
 
 @app.put("/conversations")
